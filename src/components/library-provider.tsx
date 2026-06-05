@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { saveBookAsset } from "@/lib/book-assets";
 import {
   createInitialLibraryState,
   DEFAULT_READER_SETTINGS,
@@ -14,6 +15,7 @@ import {
   type LibraryState,
   type ReaderSettings,
 } from "@/lib/books";
+import { importEpubFile } from "@/lib/epub-import";
 
 const STORAGE_KEY = "read-flow-state/library-v1";
 
@@ -23,9 +25,11 @@ interface LibraryContextValue {
   currentBookId: string | null;
   readerSettings: ReaderSettings;
   hydrated: boolean;
+  importing: boolean;
   setCurrentBookId: (bookId: string) => void;
   updateBook: (bookId: string, updater: (book: Book) => Book) => void;
   setReaderSettings: (next: ReaderSettings) => void;
+  importBook: (file: File) => Promise<Book>;
 }
 
 const LibraryContext = createContext<LibraryContextValue | null>(null);
@@ -83,6 +87,7 @@ function sanitizeState(value: unknown): LibraryState {
 export function LibraryProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<LibraryState>(createInitialLibraryState);
   const [hydrated, setHydrated] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -124,6 +129,32 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     setState((current) => ({ ...current, readerSettings: next }));
   }, []);
 
+  const importBook = useCallback(async (file: File) => {
+    setImporting(true);
+    try {
+      const { assetId, book } = await importEpubFile(file);
+      await saveBookAsset(assetId, file);
+
+      setState((current) => {
+        const existingIndex = current.books.findIndex((entry) => entry.id === book.id);
+        const books =
+          existingIndex >= 0
+            ? current.books.map((entry) => (entry.id === book.id ? book : entry))
+            : [book, ...current.books.filter((entry) => entry.id !== book.id)];
+
+        return {
+          ...current,
+          books,
+          currentBookId: book.id,
+        };
+      });
+
+      return book;
+    } finally {
+      setImporting(false);
+    }
+  }, []);
+
   const value = useMemo<LibraryContextValue>(() => {
     const currentBook = state.books.find((book) => book.id === state.currentBookId) ?? null;
     return {
@@ -132,11 +163,13 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
       currentBookId: state.currentBookId,
       readerSettings: state.readerSettings,
       hydrated,
+      importing,
       setCurrentBookId,
       updateBook,
       setReaderSettings,
+      importBook,
     };
-  }, [hydrated, setCurrentBookId, setReaderSettings, state, updateBook]);
+  }, [hydrated, importBook, importing, setCurrentBookId, setReaderSettings, state, updateBook]);
 
   return <LibraryContext.Provider value={value}>{children}</LibraryContext.Provider>;
 }

@@ -11,8 +11,10 @@ import {
   Sun,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { EpubViewer } from "@/components/epub-viewer";
 import { useLibrary } from "@/components/library-provider";
 import { SettingsSheet } from "@/components/settings-sheet";
+import { loadBookAsset } from "@/lib/book-assets";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reader/$bookId")({
@@ -27,6 +29,7 @@ function ReaderPage() {
   const { books, readerSettings, setCurrentBookId, setReaderSettings, updateBook } = useLibrary();
   const [playing, setPlaying] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [bookData, setBookData] = useState<ArrayBuffer | null>(null);
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
 
   const book = books.find((entry) => entry.id === bookId) ?? null;
@@ -44,6 +47,34 @@ function ReaderPage() {
     else root.classList.remove("dark");
     return () => root.classList.remove("dark");
   }, [readerSettings.theme]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSource = async () => {
+      if (!book || book.source.kind !== "local" || !book.source.assetId) {
+        setBookData(null);
+        return;
+      }
+
+      const asset = await loadBookAsset(book.source.assetId);
+      if (!asset || cancelled) {
+        if (!cancelled) setBookData(null);
+        return;
+      }
+
+      const buffer = await asset.arrayBuffer();
+      if (!cancelled) {
+        setBookData(buffer);
+      }
+    };
+
+    void loadSource();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [book]);
 
   const activeLine = book?.activeLine ?? 0;
 
@@ -121,38 +152,57 @@ function ReaderPage() {
       </header>
 
       <main className="flex-1 px-6 pb-48 pt-10 sm:px-8 sm:pt-16">
-        <article
-          className="mx-auto max-w-[60ch] space-y-7 font-serif"
-          style={{ fontSize: readerSettings.fontSize, lineHeight: readerSettings.lineHeight }}
-        >
-          {book.excerpt.map((line, i) => {
-            const active = i === activeLine;
-            return (
-              <p
-                key={i}
-                ref={(el) => {
-                  lineRefs.current[i] = el;
-                }}
-                onClick={() => setActiveLine(i)}
-                data-active={active}
-                className={cn(
-                  "cursor-pointer text-pretty",
-                  readerSettings.highlight === "soft" && "reading-line",
-                  readerSettings.highlight === "underline" &&
-                    (active
-                      ? "underline decoration-accent decoration-2 underline-offset-[6px]"
-                      : "text-foreground/45"),
-                  readerSettings.highlight === "bar" &&
-                    (active
-                      ? "border-l-2 border-accent pl-3"
-                      : "border-l-2 border-transparent pl-3 text-foreground/45"),
-                )}
-              >
-                {line}
-              </p>
-            );
-          })}
-        </article>
+        {book.source.kind === "local" && bookData ? (
+          <EpubViewer
+            source={bookData}
+            className="mx-auto max-w-5xl"
+            initialLocationCfi={book.locationCfi}
+            onLocationChange={(location) => {
+              updateBook(book.id, (currentBook) => ({
+                ...currentBook,
+                locationCfi: location.cfi ?? currentBook.locationCfi,
+                locationHref: location.href ?? currentBook.locationHref,
+                progress:
+                  typeof location.percentage === "number"
+                    ? Math.max(0, Math.min(1, location.percentage))
+                    : currentBook.progress,
+              }));
+            }}
+          />
+        ) : (
+          <article
+            className="mx-auto max-w-[60ch] space-y-7 font-serif"
+            style={{ fontSize: readerSettings.fontSize, lineHeight: readerSettings.lineHeight }}
+          >
+            {book.excerpt.map((line, i) => {
+              const active = i === activeLine;
+              return (
+                <p
+                  key={i}
+                  ref={(el) => {
+                    lineRefs.current[i] = el;
+                  }}
+                  onClick={() => setActiveLine(i)}
+                  data-active={active}
+                  className={cn(
+                    "cursor-pointer text-pretty",
+                    readerSettings.highlight === "soft" && "reading-line",
+                    readerSettings.highlight === "underline" &&
+                      (active
+                        ? "underline decoration-accent decoration-2 underline-offset-[6px]"
+                        : "text-foreground/45"),
+                    readerSettings.highlight === "bar" &&
+                      (active
+                        ? "border-l-2 border-accent pl-3"
+                        : "border-l-2 border-transparent pl-3 text-foreground/45"),
+                  )}
+                >
+                  {line}
+                </p>
+              );
+            })}
+          </article>
+        )}
       </main>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">

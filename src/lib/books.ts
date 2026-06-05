@@ -23,6 +23,8 @@ export interface Book {
   author: string;
   progress: number;
   chapter: string;
+  locationCfi?: string;
+  locationHref?: string;
   coverHue: number;
   coverTone: BookCoverTone;
   excerpt: string[];

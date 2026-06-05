@@ -3,13 +3,25 @@ import { LoaderCircle } from "lucide-react";
 
 type ViewerStatus = "idle" | "loading" | "ready" | "error";
 
+export interface ViewerLocation {
+  cfi?: string;
+  href?: string;
+  percentage?: number;
+}
+
 interface EpubViewerProps {
   source: ArrayBuffer | string;
   className?: string;
-  onLocationChange?: (cfi: string) => void;
+  initialLocationCfi?: string;
+  onLocationChange?: (location: ViewerLocation) => void;
 }
 
-export function EpubViewer({ source, className, onLocationChange }: EpubViewerProps) {
+export function EpubViewer({
+  source,
+  className,
+  initialLocationCfi,
+  onLocationChange,
+}: EpubViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -17,7 +29,14 @@ export function EpubViewer({ source, className, onLocationChange }: EpubViewerPr
   useEffect(() => {
     let cancelled = false;
     let bookInstance: { destroy?: () => void } | null = null;
-    let renditionInstance: { destroy?: () => void; on?: (event: string, cb: (location: { start?: { cfi?: string } }) => void) => void } | null = null;
+    let renditionInstance: {
+      destroy?: () => void;
+      display?: (target?: string) => Promise<void>;
+      on?: (
+        event: string,
+        cb: (location: { start?: { cfi?: string; href?: string; percentage?: number } }) => void,
+      ) => void;
+    } | null = null;
 
     const mountViewer = async () => {
       if (!containerRef.current) return;
@@ -39,13 +58,14 @@ export function EpubViewer({ source, className, onLocationChange }: EpubViewerPr
         });
 
         renditionInstance.on?.("relocated", (location) => {
-          const cfi = location?.start?.cfi;
-          if (cfi) {
-            onLocationChange?.(cfi);
-          }
+          onLocationChange?.({
+            cfi: location?.start?.cfi,
+            href: location?.start?.href,
+            percentage: location?.start?.percentage,
+          });
         });
 
-        await renditionInstance.display();
+        await renditionInstance.display?.(initialLocationCfi);
         if (!cancelled) {
           setStatus("ready");
         }
@@ -65,7 +85,7 @@ export function EpubViewer({ source, className, onLocationChange }: EpubViewerPr
       renditionInstance?.destroy?.();
       bookInstance?.destroy?.();
     };
-  }, [onLocationChange, source]);
+  }, [initialLocationCfi, onLocationChange, source]);
 
   return (
     <div className={className}>

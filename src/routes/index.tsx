@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronRight, Library, Settings2 } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { ChevronRight, Library, LoaderCircle, Settings2 } from "lucide-react";
 import { BookCover } from "@/components/book-cover";
 import { useLibrary } from "@/components/library-provider";
 import { UploadDropzone } from "@/components/upload-dropzone";
@@ -18,9 +18,19 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const { books, currentBook, setCurrentBookId } = useLibrary();
+  const navigate = useNavigate();
+  const { books, currentBook, importing, importBook, setCurrentBookId } = useLibrary();
   const current = currentBook ?? books[0] ?? null;
   const recent = current ? books.filter((book) => book.id !== current.id).slice(0, 4) : books.slice(0, 4);
+
+  const handleSelectedFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const imported = await importBook(files[0]);
+    await navigate({
+      to: "/reader/$bookId",
+      params: { bookId: imported.id },
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -63,12 +73,15 @@ function Home() {
             </h1>
             <div className="mt-7 flex flex-wrap gap-3">
               <label className="cursor-pointer rounded-full bg-paper px-5 py-3 text-sm font-medium text-accent transition-transform hover:scale-[1.02]">
-                Open EPUB
+                <span className="inline-flex items-center gap-2">
+                  {importing ? <LoaderCircle className="size-4 animate-spin" /> : null}
+                  {importing ? "Importing EPUB" : "Open EPUB"}
+                </span>
                 <input
                   type="file"
                   accept=".epub,application/epub+zip"
                   className="sr-only"
-                  onChange={() => {}}
+                  onChange={(event) => void handleSelectedFiles(event.target.files)}
                 />
               </label>
               {current ? (
@@ -149,7 +162,7 @@ function Home() {
           <div className="mb-4 flex items-end justify-between">
             <h2 className="text-lg font-semibold tracking-tight">Add a book</h2>
           </div>
-          <UploadDropzone />
+          <UploadDropzone onSelectFiles={(files) => void handleSelectedFiles(files)} />
         </section>
       </main>
 
