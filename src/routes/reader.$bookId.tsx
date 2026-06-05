@@ -11,7 +11,7 @@ import {
   Moon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { getBook } from "@/lib/books";
+import { getBook, type Book } from "@/lib/books";
 import { SettingsSheet, type ReaderSettings } from "@/components/settings-sheet";
 import { cn } from "@/lib/utils";
 
@@ -55,7 +55,7 @@ const DEFAULT_SETTINGS: ReaderSettings = {
 };
 
 function ReaderPage() {
-  const { book } = Route.useLoaderData();
+  const { book } = Route.useLoaderData() as { book: Book };
   const [activeLine, setActiveLine] = useState(book.activeLine);
   const [playing, setPlaying] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
