@@ -4,30 +4,48 @@ import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  FileText,
+  ListTree,
   LoaderCircle,
   Moon,
   Pause,
   Play,
   Settings2,
   Sun,
-  X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReaderMapDrawer } from "@/components/reader/reader-map-drawer";
+import { ReaderNoteEditorSheet } from "@/components/reader/reader-note-editor-sheet";
+import { ReaderPage } from "@/components/reader/reader-page";
 import { useLibrary } from "@/components/library-provider";
 import { SettingsSheet } from "@/components/settings-sheet";
+import { useReaderSpeech } from "@/hooks/use-reader-speech";
 import { loadBookAsset } from "@/lib/book-assets";
 import { type BookNote, type Bookmark as BookmarkType } from "@/lib/books";
-import { createEpubTextReader, type EpubTextReader, type EpubTextSection } from "@/lib/epub-text";
+import {
+  createEpubTextReader,
+  type EpubReadingMapItem,
+  type EpubTextReader,
+  type EpubTextSection,
+} from "@/lib/epub-text";
+import { getBookProgress, paginateSection, resolvePagePosition } from "@/lib/reader-pagination";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reader/$bookId")({
   head: () => ({
     meta: [{ title: "Reader - ReadAlong" }, { name: "description", content: "ReadAlong reader" }],
   }),
-  component: ReaderPage,
+  component: ReaderPageRoute,
 });
 
-function ReaderPage() {
+interface LocalResumeSnapshot {
+  locationHref?: string;
+  locationCfi?: string;
+  pageIndex?: number;
+  activeLine: number;
+}
+
+function ReaderPageRoute() {
   const { bookId } = Route.useParams();
   const {
     books,
@@ -44,6 +62,7 @@ function ReaderPage() {
 
   const [playing, setPlaying] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [readingMapOpen, setReadingMapOpen] = useState(false);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
   const [bookData, setBookData] = useState<ArrayBuffer | null>(null);
@@ -52,25 +71,67 @@ function ReaderPage() {
   const [localSection, setLocalSection] = useState<EpubTextSection | null>(null);
   const [localSectionLoading, setLocalSectionLoading] = useState(false);
   const [localSectionError, setLocalSectionError] = useState<string | null>(null);
-  const [availableVoices, setAvailableVoices] = useState<string[]>([]);
+  const [readingMap, setReadingMap] = useState<EpubReadingMapItem[]>([]);
 
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
   const localReaderRef = useRef<EpubTextReader | null>(null);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const localSpeechRestartKeyRef = useRef<string | null>(null);
-  const demoSpeechRestartKeyRef = useRef<string | null>(null);
-  const suppressDemoAdvanceRef = useRef(false);
+  const sectionRequestRef = useRef(0);
+  const initialLocalResumeRef = useRef<LocalResumeSnapshot | null>(null);
 
   const book = books.find((entry) => entry.id === bookId) ?? null;
+  const currentBookId = book?.id ?? null;
   const isLocalBook = book?.source.kind === "local";
+  const localBookId = isLocalBook ? (book?.id ?? null) : null;
+  const localBookTitle = isLocalBook ? (book?.title ?? "") : "";
+  const localBookAuthor = isLocalBook ? (book?.author ?? "") : "";
   const localAssetId = isLocalBook ? (book?.source.assetId ?? null) : null;
-  const activeLine = book?.activeLine ?? 0;
-  const speechSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+  const storedActiveLine = book?.activeLine ?? 0;
+  const savedLocationHref = book?.locationHref;
+  const savedLocationCfi = book?.locationCfi;
+  const savedPageIndex = book?.pageIndex;
 
+  useEffect(() => {
+    if (!currentBookId || !isLocalBook) {
+      initialLocalResumeRef.current = null;
+      return;
+    }
+
+    initialLocalResumeRef.current = {
+      locationHref: savedLocationHref,
+      locationCfi: savedLocationCfi,
+      pageIndex: savedPageIndex,
+      activeLine: storedActiveLine,
+    };
+  }, [
+    currentBookId,
+    isLocalBook,
+    savedLocationCfi,
+    savedLocationHref,
+    savedPageIndex,
+    storedActiveLine,
+  ]);
+
+  const localPages = useMemo(
+    () => (localSection ? paginateSection(localSection) : []),
+    [localSection],
+  );
+  const resolvedLocalPosition = useMemo(
+    () =>
+      resolvePagePosition(localPages, {
+        pageIndex: book?.pageIndex,
+        activeLine: storedActiveLine,
+      }),
+    [book?.pageIndex, localPages, storedActiveLine],
+  );
+  const currentPage = isLocalBook ? (localPages[resolvedLocalPosition.pageIndex] ?? null) : null;
+  const activeLine = isLocalBook ? resolvedLocalPosition.activeLine : storedActiveLine;
+  const currentParagraphIndex =
+    isLocalBook && currentPage ? currentPage.startParagraphIndex + activeLine : activeLine;
   const currentText = isLocalBook
-    ? (localSection?.paragraphs[activeLine] ?? "")
+    ? (currentPage?.paragraphs[activeLine] ?? "")
     : (book?.excerpt[activeLine] ?? "");
   const currentSectionHref = isLocalBook ? localSection?.href : undefined;
+  const currentPageIndex = isLocalBook ? resolvedLocalPosition.pageIndex : 0;
 
   const currentBookmark = useMemo(
     () =>
@@ -79,10 +140,10 @@ function ReaderPage() {
             (entry) =>
               entry.bookId === book.id &&
               entry.sectionHref === currentSectionHref &&
-              entry.paragraphIndex === activeLine,
+              entry.paragraphIndex === currentParagraphIndex,
           ) ?? null)
         : null,
-    [activeLine, book, bookmarks, currentSectionHref],
+    [book, bookmarks, currentParagraphIndex, currentSectionHref],
   );
 
   const currentNote = useMemo(
@@ -92,51 +153,148 @@ function ReaderPage() {
             (entry) =>
               entry.bookId === book.id &&
               entry.sectionHref === currentSectionHref &&
-              entry.paragraphIndex === activeLine,
+              entry.paragraphIndex === currentParagraphIndex,
           ) ?? null)
         : null,
-    [activeLine, book, currentSectionHref, notes],
+    [book, currentParagraphIndex, currentSectionHref, notes],
   );
 
+  const bookBookmarks = useMemo(
+    () => (book ? bookmarks.filter((entry) => entry.bookId === book.id) : []),
+    [book, bookmarks],
+  );
   const bookNotes = useMemo(
     () => (book ? notes.filter((entry) => entry.bookId === book.id) : []),
     [book, notes],
   );
-
+  const lastBookmark = bookBookmarks[0] ?? null;
+  const lastNote = bookNotes[0] ?? null;
   const progress = book
-    ? isLocalBook
-      ? book.progress
+    ? isLocalBook && localSection && currentPage
+      ? getBookProgress(localSection, currentPage)
       : (activeLine + 1) / Math.max(book.excerpt.length, 1)
     : 0;
   const progressPercent = Math.round(progress * 100);
+  const chapterMap = useMemo<EpubReadingMapItem[]>(
+    () =>
+      isLocalBook
+        ? readingMap
+        : book
+          ? [{ href: book.id, label: book.chapter, index: 0, progress }]
+          : [],
+    [book, isLocalBook, progress, readingMap],
+  );
   const localReaderReady =
-    !!localSection &&
+    !!currentPage &&
     !bookDataLoading &&
     !bookDataError &&
     !localSectionLoading &&
-    !localSectionError;
+    !localSectionError &&
+    !!localSection;
 
-  const getSelectedVoice = useCallback(() => {
-    if (!speechSupported) return null;
+  const persistLocalPosition = useCallback(
+    (
+      section: EpubTextSection,
+      pages: ReturnType<typeof paginateSection>,
+      pageIndex: number,
+      lineIndex: number,
+    ) => {
+      if (!book) return;
 
-    return (
-      window.speechSynthesis
-        .getVoices()
-        .find(
-          (voice) =>
-            voice.name === readerSettings.voice || readerSettings.voice === "Default voice",
-        ) ?? null
-    );
-  }, [readerSettings.voice, speechSupported]);
+      const page = pages[pageIndex];
+      if (!page) return;
+
+      const nextProgress = getBookProgress(section, page);
+
+      updateBook(book.id, (currentBook) => {
+        if (
+          currentBook.chapter === section.chapter &&
+          currentBook.locationHref === section.href &&
+          currentBook.pageIndex === page.pageIndex &&
+          currentBook.progress === nextProgress &&
+          currentBook.activeLine === lineIndex
+        ) {
+          return currentBook;
+        }
+
+        return {
+          ...currentBook,
+          chapter: section.chapter,
+          locationHref: section.href,
+          pageIndex: page.pageIndex,
+          progress: nextProgress,
+          activeLine: lineIndex,
+        };
+      });
+    },
+    [book, updateBook],
+  );
+
+  const setLocalCursor = useCallback(
+    (pageIndex: number, lineIndex = 0) => {
+      if (!localSection || !book) return;
+      const resolved = resolvePagePosition(localPages, { pageIndex, activeLine: lineIndex });
+      persistLocalPosition(localSection, localPages, resolved.pageIndex, resolved.activeLine);
+    },
+    [book, localPages, localSection, persistLocalPosition],
+  );
+
+  const loadLocalSection = useCallback(
+    async (
+      target?: string,
+      options?: {
+        pageIndex?: number;
+        paragraphIndex?: number;
+        activeLine?: number;
+      },
+    ) => {
+      if (!book || !isLocalBook || !localReaderRef.current) return;
+
+      const requestId = ++sectionRequestRef.current;
+      setLocalSectionLoading(true);
+      setLocalSectionError(null);
+
+      try {
+        const section = await localReaderRef.current.loadSection(target);
+        if (sectionRequestRef.current !== requestId) {
+          return;
+        }
+
+        const pages = paginateSection(section);
+        const resolved = resolvePagePosition(pages, options);
+        setLocalSection(section);
+        persistLocalPosition(section, pages, resolved.pageIndex, resolved.activeLine);
+      } catch (error) {
+        console.error("Failed to change EPUB section", error);
+        if (sectionRequestRef.current === requestId) {
+          setLocalSectionError(
+            error instanceof Error ? error.message : "Unable to open this part of the book.",
+          );
+        }
+      } finally {
+        if (sectionRequestRef.current === requestId) {
+          setLocalSectionLoading(false);
+        }
+      }
+    },
+    [book, isLocalBook, persistLocalPosition],
+  );
 
   const setActiveLine = useCallback(
     (nextLineOrUpdater: number | ((line: number) => number)) => {
       if (!book) return;
 
-      const maxLine = isLocalBook
-        ? Math.max((localSection?.paragraphs.length ?? 1) - 1, 0)
-        : Math.max(book.excerpt.length - 1, 0);
+      if (isLocalBook) {
+        const maxLine = Math.max((currentPage?.paragraphs.length ?? 1) - 1, 0);
+        const nextLine =
+          typeof nextLineOrUpdater === "function"
+            ? nextLineOrUpdater(activeLine)
+            : nextLineOrUpdater;
+        setLocalCursor(currentPageIndex, Math.max(0, Math.min(maxLine, nextLine)));
+        return;
+      }
 
+      const maxLine = Math.max(book.excerpt.length - 1, 0);
       updateBook(book.id, (currentBook) => {
         const nextLine =
           typeof nextLineOrUpdater === "function"
@@ -149,157 +307,78 @@ function ReaderPage() {
         };
       });
     },
-    [book, isLocalBook, localSection?.paragraphs.length, updateBook],
+    [
+      activeLine,
+      book,
+      currentPage?.paragraphs.length,
+      currentPageIndex,
+      isLocalBook,
+      setLocalCursor,
+      updateBook,
+    ],
   );
 
-  const stopSpeech = useCallback(
-    (nextPlaying = false) => {
-      if (!speechSupported) return;
+  const handlePlaybackComplete = useCallback(() => {
+    if (!book) return;
 
-      suppressDemoAdvanceRef.current = true;
-      window.speechSynthesis.cancel();
-      utteranceRef.current = null;
-      localSpeechRestartKeyRef.current = null;
-      demoSpeechRestartKeyRef.current = null;
-      setPlaying(nextPlaying);
-    },
-    [speechSupported],
-  );
-
-  const loadLocalSection = useCallback(
-    async (target?: string) => {
-      if (!book || !isLocalBook || !localReaderRef.current) return;
-
-      setLocalSectionLoading(true);
-      setLocalSectionError(null);
-
-      try {
-        const section = await localReaderRef.current.loadSection(target);
-        setLocalSection(section);
-        updateBook(book.id, (currentBook) => ({
-          ...currentBook,
-          chapter: section.chapter,
-          locationHref: section.href,
-          progress: section.progress,
-          activeLine: 0,
-        }));
-      } catch (error) {
-        console.error("Failed to change EPUB section", error);
-        setLocalSectionError(
-          error instanceof Error ? error.message : "Unable to open this part of the book.",
-        );
-      } finally {
-        setLocalSectionLoading(false);
-      }
-    },
-    [book, isLocalBook, updateBook],
-  );
-
-  const startLocalSpeech = useCallback(() => {
-    if (!speechSupported || !book || !localSection) return;
-
-    const text = localSection.paragraphs[activeLine]?.trim() ?? "";
-    if (!text) return;
-
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = readerSettings.speed;
-
-    const selectedVoice = getSelectedVoice();
-    if (selectedVoice && readerSettings.voice !== "Default voice") {
-      utterance.voice = selectedVoice;
+    if (!isLocalBook) {
+      setActiveLine((line) => (line + 1) % Math.max(book.excerpt.length, 1));
+      return;
     }
 
-    utterance.onend = () => {
-      utteranceRef.current = null;
-      localSpeechRestartKeyRef.current = null;
-
-      if (activeLine < localSection.paragraphs.length - 1) {
-        setActiveLine((line) => line + 1);
-        return;
-      }
-
-      if (localSection.nextHref) {
-        void loadLocalSection(localSection.nextHref);
-        return;
-      }
-
+    if (!currentPage || !localSection) {
       setPlaying(false);
-    };
+      return;
+    }
 
-    utterance.onerror = () => {
-      utteranceRef.current = null;
-      localSpeechRestartKeyRef.current = null;
-      setPlaying(false);
-    };
+    if (activeLine < currentPage.paragraphs.length - 1) {
+      setActiveLine(activeLine + 1);
+      return;
+    }
 
-    utteranceRef.current = utterance;
-    localSpeechRestartKeyRef.current = `${book.id}:${localSection.href}:${activeLine}:${readerSettings.speed}:${readerSettings.voice}`;
-    window.speechSynthesis.speak(utterance);
-    setPlaying(true);
+    if (currentPageIndex < currentPage.pageCount - 1) {
+      setLocalCursor(currentPageIndex + 1, 0);
+      return;
+    }
+
+    if (localSection.nextHref) {
+      void loadLocalSection(localSection.nextHref, { pageIndex: 0, activeLine: 0 });
+      return;
+    }
+
+    setPlaying(false);
   }, [
     activeLine,
     book,
-    getSelectedVoice,
+    currentPage,
+    currentPageIndex,
+    isLocalBook,
     loadLocalSection,
     localSection,
-    readerSettings.speed,
-    readerSettings.voice,
     setActiveLine,
-    speechSupported,
+    setLocalCursor,
   ]);
 
-  const startDemoSpeech = useCallback(() => {
-    if (!speechSupported || !book || isLocalBook) return;
-
-    const text = book.excerpt[activeLine]?.trim() ?? "";
-    if (!text) return;
-
-    window.speechSynthesis.cancel();
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = readerSettings.speed;
-
-    const selectedVoice = getSelectedVoice();
-    if (selectedVoice && readerSettings.voice !== "Default voice") {
-      utterance.voice = selectedVoice;
-    }
-
-    utterance.onend = () => {
-      utteranceRef.current = null;
-      demoSpeechRestartKeyRef.current = null;
-
-      if (suppressDemoAdvanceRef.current) {
-        suppressDemoAdvanceRef.current = false;
-        return;
-      }
-
-      setActiveLine((line) => (line + 1) % Math.max(book.excerpt.length, 1));
-    };
-
-    utterance.onerror = () => {
-      utteranceRef.current = null;
-      demoSpeechRestartKeyRef.current = null;
-      suppressDemoAdvanceRef.current = false;
-      setPlaying(false);
-    };
-
-    suppressDemoAdvanceRef.current = false;
-    utteranceRef.current = utterance;
-    demoSpeechRestartKeyRef.current = `${book.id}:${activeLine}:${readerSettings.speed}:${readerSettings.voice}`;
-    window.speechSynthesis.speak(utterance);
-    setPlaying(true);
-  }, [
-    activeLine,
-    book,
-    getSelectedVoice,
-    isLocalBook,
-    readerSettings.speed,
-    readerSettings.voice,
-    setActiveLine,
-    speechSupported,
-  ]);
+  const {
+    supported: speechSupported,
+    availableVoices,
+    speak,
+    stop: stopSpeech,
+  } = useReaderSpeech({
+    enabled: !isLocalBook || localReaderReady,
+    playing,
+    speechKey: book
+      ? isLocalBook
+        ? `${book.id}:${currentSectionHref}:${currentPageIndex}:${activeLine}:${readerSettings.speed}:${readerSettings.voice}`
+        : `${book.id}:${activeLine}:${readerSettings.speed}:${readerSettings.voice}`
+      : null,
+    text: currentText,
+    voiceName: readerSettings.voice,
+    rate: readerSettings.speed,
+    onEnd: handlePlaybackComplete,
+    onError: () => setPlaying(false),
+    setPlaying,
+  });
 
   const handleToggleBookmark = useCallback(() => {
     if (!book || !currentText.trim()) return;
@@ -307,10 +386,19 @@ function ReaderPage() {
     toggleBookmark({
       bookId: book.id,
       sectionHref: currentSectionHref,
-      paragraphIndex: activeLine,
+      pageIndex: isLocalBook ? currentPageIndex : undefined,
+      paragraphIndex: currentParagraphIndex,
       text: currentText,
     });
-  }, [activeLine, book, currentSectionHref, currentText, toggleBookmark]);
+  }, [
+    book,
+    currentPageIndex,
+    currentParagraphIndex,
+    currentSectionHref,
+    currentText,
+    isLocalBook,
+    toggleBookmark,
+  ]);
 
   const openNoteEditor = useCallback(() => {
     setNoteDraft(currentNote?.content ?? "");
@@ -332,21 +420,63 @@ function ReaderPage() {
     saveNote({
       bookId: book.id,
       sectionHref: currentSectionHref,
-      paragraphIndex: activeLine,
+      pageIndex: isLocalBook ? currentPageIndex : undefined,
+      paragraphIndex: currentParagraphIndex,
       anchorText: currentText,
       content: trimmed,
     });
     setNoteEditorOpen(false);
   }, [
-    activeLine,
     book,
     currentNote,
+    currentPageIndex,
+    currentParagraphIndex,
     currentSectionHref,
     currentText,
     deleteNote,
+    isLocalBook,
     noteDraft,
     saveNote,
   ]);
+
+  const jumpToLocalAnchor = useCallback(
+    async ({
+      sectionHref,
+      pageIndex,
+      paragraphIndex,
+    }: {
+      sectionHref?: string;
+      pageIndex?: number;
+      paragraphIndex: number;
+    }) => {
+      if (!localReaderReady || !localSection) return;
+
+      stopSpeech(true);
+
+      if (sectionHref && sectionHref !== localSection.href) {
+        await loadLocalSection(sectionHref, { pageIndex, paragraphIndex });
+        return;
+      }
+
+      const resolved = resolvePagePosition(localPages, { pageIndex, paragraphIndex });
+      setLocalCursor(resolved.pageIndex, resolved.activeLine);
+    },
+    [localPages, localReaderReady, localSection, loadLocalSection, setLocalCursor, stopSpeech],
+  );
+
+  const handleJumpToChapter = useCallback(
+    (chapter: EpubReadingMapItem) => {
+      if (isLocalBook) {
+        stopSpeech(true);
+        void loadLocalSection(chapter.href, { pageIndex: 0, activeLine: 0 });
+        return;
+      }
+
+      stopSpeech(true);
+      setActiveLine(0);
+    },
+    [isLocalBook, loadLocalSection, setActiveLine, stopSpeech],
+  );
 
   useEffect(() => {
     if (!book) return;
@@ -354,9 +484,9 @@ function ReaderPage() {
   }, [book, setCurrentBookId]);
 
   useEffect(() => {
-    if (!book) return;
+    if (!currentBookId) return;
     setPlaying(!isLocalBook);
-  }, [book, isLocalBook]);
+  }, [currentBookId, isLocalBook]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -370,19 +500,6 @@ function ReaderPage() {
   }, [readerSettings.theme]);
 
   useEffect(() => {
-    if (!speechSupported) return;
-
-    const readVoices = () => {
-      const voices = window.speechSynthesis.getVoices().map((voice) => voice.name);
-      setAvailableVoices(voices.length > 0 ? voices : ["Default voice"]);
-    };
-
-    readVoices();
-    window.speechSynthesis.addEventListener("voiceschanged", readVoices);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", readVoices);
-  }, [speechSupported]);
-
-  useEffect(() => {
     let cancelled = false;
 
     const loadSource = async () => {
@@ -390,6 +507,7 @@ function ReaderPage() {
         setBookData(null);
         setBookDataLoading(false);
         setBookDataError(null);
+        setReadingMap([]);
         return;
       }
 
@@ -439,10 +557,11 @@ function ReaderPage() {
     let reader: EpubTextReader | null = null;
 
     const loadInitialSection = async () => {
-      if (!isLocalBook || !bookData || !book) {
+      if (!isLocalBook || !bookData || !localBookId) {
         setLocalSection(null);
         setLocalSectionLoading(false);
         setLocalSectionError(null);
+        setReadingMap([]);
         return;
       }
 
@@ -451,8 +570,8 @@ function ReaderPage() {
 
       try {
         reader = await createEpubTextReader(bookData, {
-          title: book.title,
-          author: book.author,
+          title: localBookTitle,
+          author: localBookAuthor,
         });
         if (cancelled) {
           reader.destroy();
@@ -460,24 +579,28 @@ function ReaderPage() {
         }
 
         localReaderRef.current = reader;
-        const section = await reader.loadSection(book.locationHref ?? book.locationCfi);
+        setReadingMap(reader.getReadingMap());
+        const resume = initialLocalResumeRef.current;
+        const section = await reader.loadSection(resume?.locationHref ?? resume?.locationCfi);
         if (cancelled) {
           reader.destroy();
           return;
         }
 
+        const pages = paginateSection(section);
+        const useSavedPage = resume?.locationHref && resume.locationHref === section.href;
+        const resolved = resolvePagePosition(pages, {
+          pageIndex: useSavedPage ? resume?.pageIndex : 0,
+          activeLine: useSavedPage ? resume?.activeLine : 0,
+        });
+
         setLocalSection(section);
-        updateBook(book.id, (currentBook) => ({
-          ...currentBook,
-          chapter: section.chapter,
-          locationHref: section.href,
-          progress: section.progress,
-          activeLine: Math.min(currentBook.activeLine, Math.max(section.paragraphs.length - 1, 0)),
-        }));
+        persistLocalPosition(section, pages, resolved.pageIndex, resolved.activeLine);
       } catch (error) {
         console.error("Failed to prepare EPUB text view", error);
         if (!cancelled) {
           setLocalSection(null);
+          setReadingMap([]);
           setLocalSectionError(
             error instanceof Error
               ? error.message
@@ -498,57 +621,16 @@ function ReaderPage() {
       localReaderRef.current = null;
       reader?.destroy();
     };
-  }, [book?.id, bookData, isLocalBook, updateBook, book]);
+  }, [bookData, isLocalBook, localBookAuthor, localBookId, localBookTitle, persistLocalPosition]);
 
   useEffect(() => {
-    const el = lineRefs.current[activeLine];
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [activeLine, currentSectionHref]);
+    lineRefs.current = [];
+  }, [currentPage?.id, currentSectionHref, isLocalBook]);
 
   useEffect(() => {
-    if (!speechSupported) return;
-
-    return () => {
-      window.speechSynthesis.cancel();
-      utteranceRef.current = null;
-    };
-  }, [speechSupported]);
-
-  useEffect(() => {
-    if (!isLocalBook || !playing || !book) return;
-    if (!localSection?.paragraphs.length) return;
-
-    const nextKey = `${book.id}:${localSection.href}:${activeLine}:${readerSettings.speed}:${readerSettings.voice}`;
-    if (localSpeechRestartKeyRef.current === nextKey) return;
-
-    startLocalSpeech();
-  }, [
-    activeLine,
-    book,
-    isLocalBook,
-    localSection,
-    playing,
-    readerSettings.speed,
-    readerSettings.voice,
-    startLocalSpeech,
-  ]);
-
-  useEffect(() => {
-    if (isLocalBook || !playing || !book) return;
-
-    const nextKey = `${book.id}:${activeLine}:${readerSettings.speed}:${readerSettings.voice}`;
-    if (demoSpeechRestartKeyRef.current === nextKey) return;
-
-    startDemoSpeech();
-  }, [
-    activeLine,
-    book,
-    isLocalBook,
-    playing,
-    readerSettings.speed,
-    readerSettings.voice,
-    startDemoSpeech,
-  ]);
+    const element = lineRefs.current[activeLine];
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [activeLine, currentPage?.id, currentSectionHref]);
 
   if (!book) {
     return (
@@ -563,10 +645,14 @@ function ReaderPage() {
     );
   }
 
+  const showLocalLoadingCard =
+    isLocalBook && !localSection && (bookDataLoading || localSectionLoading);
+  const showLocalErrorCard = isLocalBook && !localSection && (bookDataError || localSectionError);
+
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-5">
+        <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-3 px-4 sm:px-5">
           <Link
             to="/library"
             className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted"
@@ -574,11 +660,11 @@ function ReaderPage() {
           >
             <ArrowLeft className="size-5" />
           </Link>
-          <div className="text-center">
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="min-w-0 flex-1 text-center">
+            <p className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               {book.chapter}
             </p>
-            <p className="font-serif text-sm italic">{book.title}</p>
+            <p className="truncate font-serif text-sm italic">{book.title}</p>
           </div>
           <button
             onClick={handleToggleBookmark}
@@ -593,134 +679,80 @@ function ReaderPage() {
         </div>
       </header>
 
-      <main className="flex-1 px-6 pb-52 pt-10 sm:px-8 sm:pt-16">
-        {isLocalBook ? (
-          bookDataLoading || localSectionLoading ? (
-            <div className="mx-auto grid min-h-[28rem] max-w-5xl place-items-center rounded-[2rem] border border-border bg-card">
-              <div className="flex items-center gap-3 rounded-full border border-border bg-background px-4 py-2 text-sm text-muted-foreground shadow-sm">
-                <LoaderCircle className="size-4 animate-spin" />
-                Preparing your book
-              </div>
+      <main className="flex-1 px-4 pb-60 pt-8 sm:px-8 sm:pb-52 sm:pt-16">
+        {showLocalLoadingCard ? (
+          <div className="mx-auto grid min-h-[28rem] max-w-5xl place-items-center rounded-[2rem] border border-border bg-card">
+            <div className="flex items-center gap-3 rounded-full border border-border bg-background px-4 py-2 text-sm text-muted-foreground shadow-sm">
+              <LoaderCircle className="size-4 animate-spin" />
+              Preparing your book
             </div>
-          ) : bookDataError || localSectionError ? (
-            <div className="mx-auto grid min-h-[28rem] max-w-5xl place-items-center rounded-[2rem] border border-border bg-card p-6 text-center">
-              <div>
-                <p className="font-medium text-foreground">This EPUB could not be opened.</p>
-                <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                  {bookDataError ?? localSectionError}
-                </p>
-              </div>
+          </div>
+        ) : showLocalErrorCard ? (
+          <div className="mx-auto grid min-h-[28rem] max-w-5xl place-items-center rounded-[2rem] border border-border bg-card p-6 text-center">
+            <div>
+              <p className="font-medium text-foreground">This EPUB could not be opened.</p>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                {bookDataError ?? localSectionError}
+              </p>
             </div>
-          ) : localSection ? (
-            <article
-              className="mx-auto max-w-[60ch] space-y-7 font-serif"
-              style={{ fontSize: readerSettings.fontSize, lineHeight: readerSettings.lineHeight }}
-            >
-              {localSection.paragraphs.map((line, index) => {
-                const active = index === activeLine;
-                return (
-                  <p
-                    key={`${localSection.href}-${index}`}
-                    ref={(el) => {
-                      lineRefs.current[index] = el;
-                    }}
-                    onClick={() => setActiveLine(index)}
-                    data-active={active}
-                    className={cn(
-                      "cursor-pointer text-pretty",
-                      readerSettings.highlight === "soft" && "reading-line",
-                      readerSettings.highlight === "underline" &&
-                        (active
-                          ? "underline decoration-accent decoration-2 underline-offset-[6px]"
-                          : "text-foreground/45"),
-                      readerSettings.highlight === "bar" &&
-                        (active
-                          ? "border-l-2 border-accent pl-3"
-                          : "border-l-2 border-transparent pl-3 text-foreground/45"),
-                    )}
-                  >
-                    {line}
+          </div>
+        ) : isLocalBook ? (
+          <>
+            {currentPage ? (
+              <ReaderPage
+                pageKey={currentPage.id}
+                paragraphs={currentPage.paragraphs}
+                activeLine={activeLine}
+                fontSize={readerSettings.fontSize}
+                lineHeight={readerSettings.lineHeight}
+                highlight={readerSettings.highlight}
+                registerLineRef={(index, element) => {
+                  lineRefs.current[index] = element;
+                }}
+                onSelectLine={setActiveLine}
+              />
+            ) : (
+              <div className="mx-auto grid min-h-[28rem] max-w-5xl place-items-center rounded-[2rem] border border-border bg-card p-6 text-center">
+                <div>
+                  <p className="font-medium text-foreground">This EPUB is not ready yet.</p>
+                  <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                    We could not attach the uploaded file to the reader. Please import the EPUB
+                    again.
                   </p>
-                );
-              })}
-            </article>
-          ) : (
-            <div className="mx-auto grid min-h-[28rem] max-w-5xl place-items-center rounded-[2rem] border border-border bg-card p-6 text-center">
-              <div>
-                <p className="font-medium text-foreground">This EPUB is not ready yet.</p>
-                <p className="mt-2 max-w-md text-sm text-muted-foreground">
-                  We could not attach the uploaded file to the reader. Please import the EPUB again.
-                </p>
-              </div>
-            </div>
-          )
-        ) : (
-          <article
-            className="mx-auto max-w-[60ch] space-y-7 font-serif"
-            style={{ fontSize: readerSettings.fontSize, lineHeight: readerSettings.lineHeight }}
-          >
-            {book.excerpt.map((line, index) => {
-              const active = index === activeLine;
-              return (
-                <p
-                  key={index}
-                  ref={(el) => {
-                    lineRefs.current[index] = el;
-                  }}
-                  onClick={() => setActiveLine(index)}
-                  data-active={active}
-                  className={cn(
-                    "cursor-pointer text-pretty",
-                    readerSettings.highlight === "soft" && "reading-line",
-                    readerSettings.highlight === "underline" &&
-                      (active
-                        ? "underline decoration-accent decoration-2 underline-offset-[6px]"
-                        : "text-foreground/45"),
-                    readerSettings.highlight === "bar" &&
-                      (active
-                        ? "border-l-2 border-accent pl-3"
-                        : "border-l-2 border-transparent pl-3 text-foreground/45"),
-                  )}
-                >
-                  {line}
-                </p>
-              );
-            })}
-          </article>
-        )}
-
-        {bookNotes.length > 0 ? (
-          <section className="mx-auto mt-12 max-w-3xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Notes
-              </h2>
-            </div>
-            <div className="space-y-3">
-              {bookNotes.map((note) => (
-                <div key={note.id} className="rounded-2xl border border-border bg-card p-4">
-                  <p className="text-sm text-muted-foreground">{note.anchorText}</p>
-                  <p className="mt-2 text-sm leading-6">{note.content}</p>
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{new Date(note.updatedAt).toLocaleString()}</span>
-                    <button
-                      onClick={() => deleteNote(note.id)}
-                      className="rounded-full px-2 py-1 hover:bg-muted hover:text-foreground"
-                    >
-                      Delete
-                    </button>
-                  </div>
                 </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
+              </div>
+            )}
+          </>
+        ) : (
+          <ReaderPage
+            pageKey={book.id}
+            paragraphs={book.excerpt}
+            activeLine={activeLine}
+            fontSize={readerSettings.fontSize}
+            lineHeight={readerSettings.lineHeight}
+            highlight={readerSettings.highlight}
+            registerLineRef={(index, element) => {
+              lineRefs.current[index] = element;
+            }}
+            onSelectLine={setActiveLine}
+          />
+        )}
       </main>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
-        <div className="pointer-events-auto mx-auto max-w-lg rounded-3xl border border-border bg-card/95 p-4 shadow-2xl backdrop-blur-md sm:p-5">
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-6">
+        <div className="pointer-events-auto mx-auto max-w-[min(42rem,calc(100vw-1rem))] rounded-3xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur-md sm:max-w-[min(48rem,calc(100vw-3rem))] sm:p-5">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="min-w-0 truncate text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              {book.chapter}
+            </p>
+            {isLocalBook && currentPage ? (
+              <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Page {currentPage.pageIndex + 1} of {currentPage.pageCount}
+              </span>
+            ) : null}
+          </div>
           <div className="mb-4 flex items-center gap-3">
-            <span className="w-10 text-[10px] font-medium uppercase tracking-widest tabular-nums text-muted-foreground">
+            <span className="w-12 text-[10px] font-medium uppercase tracking-widest tabular-nums text-muted-foreground">
               {isLocalBook ? `${progressPercent}%` : `${Math.round(progress * 22)}m`}
             </span>
             <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
@@ -736,60 +768,63 @@ function ReaderPage() {
               )}
               title={isLocalBook ? book.chapter : undefined}
             >
-              {isLocalBook ? book.chapter : `-${22 - Math.round(progress * 22)}m`}
+              {isLocalBook && currentPage
+                ? `P${currentPage.pageIndex + 1}/${currentPage.pageCount}`
+                : `-${22 - Math.round(progress * 22)}m`}
             </span>
           </div>
 
-          <div className="flex items-center justify-between">
-            <button
-              disabled={isLocalBook && (!speechSupported || !localReaderReady)}
-              onClick={() =>
-                setReaderSettings({
-                  ...readerSettings,
-                  speed:
-                    readerSettings.speed >= 1.75
-                      ? 0.8
-                      : Math.round((readerSettings.speed + 0.25) * 100) / 100,
-                })
-              }
-              className={cn(
-                "min-w-12 rounded-full px-2 py-1 text-xs font-semibold tabular-nums text-muted-foreground",
-                isLocalBook && (!speechSupported || !localReaderReady)
-                  ? "cursor-not-allowed opacity-40"
-                  : "hover:text-foreground",
-              )}
-              aria-label={
-                isLocalBook && !localReaderReady
-                  ? "EPUB playback will be available once the book finishes loading"
-                  : isLocalBook && !speechSupported
-                    ? "Speech synthesis is not available in this browser"
-                    : "Reading speed"
-              }
-            >
-              {readerSettings.speed}x
-            </button>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+            <div className="flex items-center justify-center sm:justify-start">
+              <div className="inline-flex max-w-full overflow-x-auto rounded-full border border-border bg-background/70 p-1">
+                {[0.8, 1, 1.25, 1.5].map((speed) => (
+                  <button
+                    key={speed}
+                    disabled={isLocalBook && (!speechSupported || !localReaderReady)}
+                    onClick={() => setReaderSettings({ ...readerSettings, speed })}
+                    className={cn(
+                      "rounded-full px-2.5 py-1.5 text-[11px] font-medium tabular-nums transition-colors sm:px-3",
+                      readerSettings.speed === speed
+                        ? "bg-accent text-accent-foreground"
+                        : "text-muted-foreground hover:text-foreground",
+                      isLocalBook && (!speechSupported || !localReaderReady)
+                        ? "cursor-not-allowed opacity-40"
+                        : "",
+                    )}
+                    aria-label={`Set reading speed to ${speed}x`}
+                  >
+                    {speed}x
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex items-center justify-center gap-2 sm:gap-3">
               <button
                 onClick={() => {
                   if (isLocalBook) {
                     if (!localReaderReady) return;
-                    if (playing) {
-                      stopSpeech(true);
+                    stopSpeech(true);
+
+                    if (currentPage && currentPage.pageIndex > 0) {
+                      setLocalCursor(currentPage.pageIndex - 1, 0);
+                      return;
                     }
+
                     if (localSection?.prevHref) {
-                      void loadLocalSection(localSection.prevHref);
+                      void loadLocalSection(localSection.prevHref, {
+                        pageIndex: Number.MAX_SAFE_INTEGER,
+                        activeLine: 0,
+                      });
                     }
                     return;
                   }
 
-                  if (playing) {
-                    stopSpeech(true);
-                  }
+                  stopSpeech(true);
                   setActiveLine((line) => line - 1);
                 }}
-                className="grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label={isLocalBook ? "Previous section" : "Previous line"}
+                className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground sm:size-11"
+                aria-label={isLocalBook ? "Previous page" : "Previous line"}
               >
                 <ChevronLeft className="size-6" />
               </button>
@@ -800,7 +835,7 @@ function ReaderPage() {
                     if (playing) {
                       stopSpeech();
                     } else {
-                      startLocalSpeech();
+                      speak();
                     }
                     return;
                   }
@@ -812,7 +847,7 @@ function ReaderPage() {
                   }
                 }}
                 className={cn(
-                  "grid size-14 place-items-center rounded-full bg-accent text-accent-foreground shadow-lg shadow-accent/30 transition-transform",
+                  "grid size-12 place-items-center rounded-full bg-accent text-accent-foreground shadow-lg shadow-accent/30 transition-transform sm:size-14",
                   isLocalBook && (!speechSupported || !localReaderReady)
                     ? "cursor-not-allowed opacity-60"
                     : "hover:scale-[1.03] active:scale-95",
@@ -834,34 +869,44 @@ function ReaderPage() {
                 onClick={() => {
                   if (isLocalBook) {
                     if (!localReaderReady) return;
-                    if (playing) {
-                      stopSpeech(true);
+                    stopSpeech(true);
+
+                    if (currentPage && currentPage.pageIndex < currentPage.pageCount - 1) {
+                      setLocalCursor(currentPage.pageIndex + 1, 0);
+                      return;
                     }
+
                     if (localSection?.nextHref) {
-                      void loadLocalSection(localSection.nextHref);
+                      void loadLocalSection(localSection.nextHref, { pageIndex: 0, activeLine: 0 });
                     }
                     return;
                   }
 
-                  if (playing) {
-                    stopSpeech(true);
-                  }
+                  stopSpeech(true);
                   setActiveLine((line) => line + 1);
                 }}
-                className="grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label={isLocalBook ? "Next section" : "Next line"}
+                className="grid size-10 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground sm:size-11"
+                aria-label={isLocalBook ? "Next page" : "Next line"}
               >
                 <ChevronRight className="size-6" />
               </button>
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center justify-center gap-0.5 sm:justify-end sm:gap-1">
+              <button
+                onClick={() => setReadingMapOpen(true)}
+                className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Open reading map"
+              >
+                <ListTree className="size-4" />
+              </button>
               <button
                 onClick={openNoteEditor}
-                className="rounded-full px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground sm:w-auto sm:px-2 sm:py-2 lg:px-3"
                 aria-label="Add note"
               >
-                Note
+                <FileText className="size-4" />
+                <span className="hidden lg:inline">Note</span>
               </button>
               <button
                 onClick={() =>
@@ -899,69 +944,54 @@ function ReaderPage() {
         voices={availableVoices}
       />
 
-      <div
-        className={cn(
-          "fixed inset-0 z-50 bg-black/30 backdrop-blur-[2px] transition-opacity duration-300",
-          noteEditorOpen ? "opacity-100" : "pointer-events-none opacity-0",
-        )}
-        onClick={() => setNoteEditorOpen(false)}
-        aria-hidden
+      <ReaderMapDrawer
+        open={readingMapOpen}
+        onOpenChange={setReadingMapOpen}
+        chapters={chapterMap}
+        bookmarks={bookBookmarks}
+        notes={bookNotes}
+        lastBookmark={lastBookmark}
+        lastNote={lastNote}
+        activeSectionHref={currentSectionHref}
+        currentProgressPercent={progressPercent}
+        activeBookmarkId={currentBookmark?.id}
+        activeNoteId={currentNote?.id}
+        onJumpToChapter={handleJumpToChapter}
+        onJumpToBookmark={(bookmark) => {
+          if (isLocalBook) {
+            void jumpToLocalAnchor(bookmark);
+            return;
+          }
+          stopSpeech(true);
+          setActiveLine(bookmark.paragraphIndex);
+        }}
+        onJumpToNote={(note) => {
+          if (isLocalBook) {
+            void jumpToLocalAnchor(note);
+            return;
+          }
+          stopSpeech(true);
+          setActiveLine(note.paragraphIndex);
+        }}
+        onDeleteNote={deleteNote}
       />
-      <div
-        className={cn(
-          "fixed inset-x-0 bottom-0 z-50 mx-auto max-w-lg rounded-t-3xl bg-card text-card-foreground shadow-2xl transition-transform duration-300 ease-out",
-          noteEditorOpen ? "translate-y-0" : "translate-y-full",
-        )}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Add note"
-      >
-        <div className="flex justify-center pt-3">
-          <div className="h-1.5 w-12 rounded-full bg-muted" />
-        </div>
-        <div className="flex items-center justify-between px-6 pt-4">
-          <h2 className="font-serif text-xl">Note</h2>
-          <button
-            onClick={() => setNoteEditorOpen(false)}
-            className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted"
-            aria-label="Close"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-        <div className="space-y-4 px-6 pb-8 pt-4">
-          <div className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">
-            {currentText || "Select a line to attach a note."}
-          </div>
-          <textarea
-            value={noteDraft}
-            onChange={(event) => setNoteDraft(event.target.value)}
-            rows={6}
-            placeholder="Write a note for this line"
-            className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm outline-none ring-0 placeholder:text-muted-foreground focus:border-accent"
-          />
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => {
-                if (currentNote) {
-                  deleteNote(currentNote.id);
-                }
-                setNoteDraft("");
-                setNoteEditorOpen(false);
-              }}
-              className="rounded-full px-4 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              {currentNote ? "Delete note" : "Cancel"}
-            </button>
-            <button
-              onClick={handleSaveNote}
-              className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-accent-foreground"
-            >
-              Save note
-            </button>
-          </div>
-        </div>
-      </div>
+
+      <ReaderNoteEditorSheet
+        open={noteEditorOpen}
+        currentText={currentText}
+        noteDraft={noteDraft}
+        hasCurrentNote={!!currentNote}
+        onClose={() => setNoteEditorOpen(false)}
+        onDeleteOrCancel={() => {
+          if (currentNote) {
+            deleteNote(currentNote.id);
+          }
+          setNoteDraft("");
+          setNoteEditorOpen(false);
+        }}
+        onSave={handleSaveNote}
+        onDraftChange={setNoteDraft}
+      />
     </div>
   );
 }

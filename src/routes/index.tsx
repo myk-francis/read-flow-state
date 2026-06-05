@@ -1,20 +1,22 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ChevronRight, Library, LoaderCircle, Settings2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { BookCover } from "@/components/book-cover";
 import { useLibrary } from "@/components/library-provider";
-import { UploadDropzone } from "@/components/upload-dropzone";
+import { SettingsSheet } from "@/components/settings-sheet";
 import { MiniPlayer } from "@/components/mini-player";
+import { UploadDropzone } from "@/components/upload-dropzone";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "ReadAlong — Read your EPUBs aloud" },
+      { title: "ReadAlong - Read your EPUBs aloud" },
       {
         name: "description",
         content:
           "A calm, modern EPUB reader that reads books aloud and highlights every line as it goes.",
       },
-      { property: "og:title", content: "ReadAlong — Read your EPUBs aloud" },
+      { property: "og:title", content: "ReadAlong - Read your EPUBs aloud" },
       {
         property: "og:description",
         content:
@@ -27,11 +29,38 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   const navigate = useNavigate();
-  const { books, currentBook, importing, importBook, setCurrentBookId } = useLibrary();
+  const {
+    books,
+    currentBook,
+    importing,
+    importBook,
+    readerSettings,
+    setCurrentBookId,
+    setReaderSettings,
+  } = useLibrary();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<string[]>([]);
+
   const current = currentBook ?? books[0] ?? null;
   const recent = current
     ? books.filter((book) => book.id !== current.id).slice(0, 4)
     : books.slice(0, 4);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setAvailableVoices(["Default voice"]);
+      return;
+    }
+
+    const readVoices = () => {
+      const voices = window.speechSynthesis.getVoices().map((voice) => voice.name);
+      setAvailableVoices(voices.length > 0 ? voices : ["Default voice"]);
+    };
+
+    readVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", readVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", readVoices);
+  }, []);
 
   const handleSelectedFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -44,9 +73,8 @@ function Home() {
 
   return (
     <div className="min-h-screen bg-background pb-32">
-      {/* Top bar */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-5">
+        <div className="mx-auto flex h-16 max-w-2xl items-center justify-between px-4 sm:px-5">
           <div className="flex items-center gap-2">
             <div className="grid size-8 place-items-center rounded-lg bg-accent text-accent-foreground">
               <div className="h-0.5 w-4 rounded-full bg-current" />
@@ -62,6 +90,7 @@ function Home() {
               <Library className="size-5" />
             </Link>
             <button
+              onClick={() => setSettingsOpen(true)}
               className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted"
               aria-label="Settings"
             >
@@ -71,14 +100,13 @@ function Home() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-2xl px-5 pt-8">
-        {/* Hero */}
+      <main className="mx-auto max-w-2xl px-4 pt-6 sm:px-5 sm:pt-8">
         <section className="mb-10">
-          <div className="rounded-3xl bg-accent p-7 text-accent-foreground shadow-xl shadow-accent/10 sm:p-9">
+          <div className="rounded-3xl bg-accent p-6 text-accent-foreground shadow-xl shadow-accent/10 sm:p-9">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] opacity-80">
               Welcome back
             </p>
-            <h1 className="mt-2 font-serif text-3xl italic leading-tight sm:text-4xl">
+            <h1 className="mt-2 text-balance font-serif text-2xl italic leading-tight sm:text-4xl">
               Where would you like to be read to today?
             </h1>
             <div className="mt-7 flex flex-wrap gap-3">
@@ -108,7 +136,6 @@ function Home() {
           </div>
         </section>
 
-        {/* Continue reading */}
         {current ? (
           <section className="mb-10">
             <div className="mb-4 flex items-end justify-between">
@@ -122,13 +149,15 @@ function Home() {
               to="/reader/$bookId"
               params={{ bookId: current.id }}
               onClick={() => setCurrentBookId(current.id)}
-              className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/50"
+              className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5 transition-colors hover:bg-muted/50 sm:gap-4 sm:p-4"
             >
-              <div className="w-20 shrink-0">
+              <div className="w-18 shrink-0 sm:w-20">
                 <BookCover book={current} />
               </div>
               <div className="min-w-0 flex-1">
-                <h3 className="truncate font-serif text-lg leading-tight">{current.title}</h3>
+                <h3 className="truncate font-serif text-base leading-tight sm:text-lg">
+                  {current.title}
+                </h3>
                 <p className="truncate text-sm text-muted-foreground">{current.author}</p>
                 <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
                   <div
@@ -145,29 +174,30 @@ function Home() {
           </section>
         ) : null}
 
-        {/* Recent */}
         <section className="mb-10">
           <div className="mb-4 flex items-end justify-between">
             <h2 className="text-lg font-semibold tracking-tight">Recent</h2>
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {recent.map((b) => (
+            {recent.map((book) => (
               <Link
-                key={b.id}
+                key={book.id}
                 to="/reader/$bookId"
-                params={{ bookId: b.id }}
-                onClick={() => setCurrentBookId(b.id)}
+                params={{ bookId: book.id }}
+                onClick={() => setCurrentBookId(book.id)}
                 className="group block"
               >
-                <BookCover book={b} className="transition-transform group-hover:-translate-y-0.5" />
-                <p className="mt-3 truncate text-sm font-medium">{b.title}</p>
-                <p className="truncate text-xs text-muted-foreground">{b.author}</p>
+                <BookCover
+                  book={book}
+                  className="transition-transform group-hover:-translate-y-0.5"
+                />
+                <p className="mt-3 truncate text-sm font-medium">{book.title}</p>
+                <p className="truncate text-xs text-muted-foreground">{book.author}</p>
               </Link>
             ))}
           </div>
         </section>
 
-        {/* Import */}
         <section className="mb-10">
           <div className="mb-4 flex items-end justify-between">
             <h2 className="text-lg font-semibold tracking-tight">Add a book</h2>
@@ -177,6 +207,14 @@ function Home() {
       </main>
 
       {current ? <MiniPlayer book={current} /> : null}
+
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={readerSettings}
+        onChange={setReaderSettings}
+        voices={availableVoices}
+      />
     </div>
   );
 }

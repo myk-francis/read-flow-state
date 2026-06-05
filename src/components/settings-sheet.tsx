@@ -1,5 +1,12 @@
 import { useEffect } from "react";
 import { X } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { ReaderSettings } from "@/lib/books";
 
@@ -16,7 +23,7 @@ const SPEEDS = [0.8, 1, 1.25, 1.5, 1.75];
 
 export function SettingsSheet({ open, onClose, settings, onChange, voices }: Props) {
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const handler = (event: KeyboardEvent) => event.key === "Escape" && onClose();
     if (open) window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
@@ -35,14 +42,16 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
       />
       <div
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 mx-auto max-w-lg rounded-t-3xl bg-card text-card-foreground shadow-2xl transition-transform duration-300 ease-out",
-          open ? "translate-y-0" : "translate-y-full",
+          "fixed inset-x-0 bottom-0 z-50 mx-auto max-h-[85vh] overflow-hidden rounded-t-3xl bg-card text-card-foreground shadow-2xl transition-transform duration-300 ease-out sm:left-1/2 sm:right-auto sm:top-1/2 sm:bottom-auto sm:max-h-[min(80vh,44rem)] sm:w-[min(36rem,calc(100vw-3rem))] sm:-translate-x-1/2 sm:rounded-3xl",
+          open
+            ? "translate-y-0 sm:-translate-y-1/2"
+            : "pointer-events-none translate-y-full sm:-translate-x-1/2 sm:translate-y-[calc(-50%+2rem)] sm:opacity-0",
         )}
         role="dialog"
         aria-modal="true"
         aria-label="Reader settings"
       >
-        <div className="flex justify-center pt-3">
+        <div className="flex justify-center pt-3 sm:hidden">
           <div className="h-1.5 w-12 rounded-full bg-muted" />
         </div>
         <div className="flex items-center justify-between px-6 pt-4">
@@ -56,14 +65,13 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
           </button>
         </div>
 
-        <div className="space-y-8 px-6 pb-10 pt-6">
-          {/* Highlight preview */}
+        <div className="max-h-[calc(85vh-4rem)] space-y-8 overflow-y-auto px-6 pb-10 pt-6 sm:max-h-[calc(min(80vh,44rem)-4rem)]">
           <div className="rounded-2xl bg-muted/60 p-5">
             <p
               className="font-serif leading-relaxed"
               style={{ fontSize: settings.fontSize, lineHeight: settings.lineHeight }}
             >
-              <span className="text-muted-foreground">Preview — </span>
+              <span className="text-muted-foreground">Preview - </span>
               <span
                 className={cn(
                   "relative",
@@ -79,7 +87,6 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
             </p>
           </div>
 
-          {/* Font size */}
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
@@ -93,12 +100,11 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
               max={26}
               step={1}
               value={settings.fontSize}
-              onChange={(e) => onChange({ ...settings, fontSize: Number(e.target.value) })}
+              onChange={(event) => onChange({ ...settings, fontSize: Number(event.target.value) })}
               className="w-full accent-[var(--accent)]"
             />
           </div>
 
-          {/* Line spacing */}
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
@@ -114,47 +120,47 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
               max={2}
               step={0.05}
               value={settings.lineHeight}
-              onChange={(e) => onChange({ ...settings, lineHeight: Number(e.target.value) })}
+              onChange={(event) =>
+                onChange({ ...settings, lineHeight: Number(event.target.value) })
+              }
               className="w-full accent-[var(--accent)]"
             />
           </div>
 
-          {/* Highlight style */}
           <div>
             <label className="mb-3 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Highlight style
             </label>
             <div className="grid grid-cols-3 gap-2">
-              {(["soft", "underline", "bar"] as const).map((h) => (
+              {(["soft", "underline", "bar"] as const).map((highlight) => (
                 <button
-                  key={h}
-                  onClick={() => onChange({ ...settings, highlight: h })}
+                  key={highlight}
+                  onClick={() => onChange({ ...settings, highlight })}
                   className={cn(
                     "rounded-xl border px-3 py-3 text-xs font-medium capitalize transition-colors",
-                    settings.highlight === h
+                    settings.highlight === highlight
                       ? "border-accent bg-accent/10 text-accent"
                       : "border-border text-muted-foreground hover:bg-muted",
                   )}
                 >
-                  {h}
+                  {highlight}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Theme */}
           <div>
             <label className="mb-3 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Theme
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {(["light", "dark"] as const).map((t) => (
+              {(["light", "dark"] as const).map((theme) => (
                 <button
-                  key={t}
-                  onClick={() => onChange({ ...settings, theme: t })}
+                  key={theme}
+                  onClick={() => onChange({ ...settings, theme })}
                   className={cn(
                     "flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-medium capitalize",
-                    settings.theme === t
+                    settings.theme === theme
                       ? "border-accent bg-accent/10 text-accent"
                       : "border-border",
                   )}
@@ -162,56 +168,55 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
                   <span
                     className={cn(
                       "size-3 rounded-full ring-1",
-                      t === "light" ? "bg-[#FBF9F6] ring-zinc-300" : "bg-zinc-900 ring-zinc-700",
+                      theme === "light"
+                        ? "bg-[#FBF9F6] ring-zinc-300"
+                        : "bg-zinc-900 ring-zinc-700",
                     )}
                   />
-                  {t === "light" ? "Afternoon" : "Midnight"}
+                  {theme === "light" ? "Afternoon" : "Midnight"}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Voice */}
           <div>
             <label className="mb-3 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Voice
             </label>
-            <div className="flex flex-wrap gap-2">
-              {voiceOptions.map((v) => (
-                <button
-                  key={v}
-                  onClick={() => onChange({ ...settings, voice: v })}
-                  className={cn(
-                    "rounded-full border px-3 py-1.5 text-xs",
-                    settings.voice === v
-                      ? "border-accent bg-accent/10 text-accent"
-                      : "border-border text-muted-foreground",
-                  )}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
+            <Select
+              value={settings.voice}
+              onValueChange={(value) => onChange({ ...settings, voice: value })}
+            >
+              <SelectTrigger className="h-11 rounded-2xl border-border bg-background text-sm">
+                <SelectValue placeholder="Choose a voice" />
+              </SelectTrigger>
+              <SelectContent className="max-h-80">
+                {voiceOptions.map((voice) => (
+                  <SelectItem key={voice} value={voice}>
+                    {voice}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Speed */}
           <div>
             <label className="mb-3 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Reading speed
             </label>
-            <div className="flex gap-2">
-              {SPEEDS.map((s) => (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+              {SPEEDS.map((speed) => (
                 <button
-                  key={s}
-                  onClick={() => onChange({ ...settings, speed: s })}
+                  key={speed}
+                  onClick={() => onChange({ ...settings, speed })}
                   className={cn(
-                    "flex-1 rounded-xl border py-2 text-xs font-medium tabular-nums",
-                    settings.speed === s
+                    "rounded-xl border py-2 text-xs font-medium tabular-nums",
+                    settings.speed === speed
                       ? "border-accent bg-accent/10 text-accent"
                       : "border-border text-muted-foreground",
                   )}
                 >
-                  {s}x
+                  {speed}x
                 </button>
               ))}
             </div>

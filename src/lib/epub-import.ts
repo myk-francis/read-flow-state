@@ -68,6 +68,7 @@ export async function importEpubFile(file: File): Promise<{ assetId: string; boo
         author,
         progress: 0,
         chapter: firstNavigationLabel(navigation),
+        pageIndex: 0,
         coverHue: hash % 360,
         coverTone: toneFromHash(hash),
         excerpt: FALLBACK_EXCERPT,

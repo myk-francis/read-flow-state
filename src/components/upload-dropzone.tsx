@@ -15,24 +15,24 @@ export function UploadDropzone({ compact = false, onSelectFiles }: UploadDropzon
 
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const f = files[0];
-    if (!f.name.toLowerCase().endsWith(".epub")) {
-      setFilename(f.name);
+    const file = files[0];
+    if (!file.name.toLowerCase().endsWith(".epub")) {
+      setFilename(file.name);
       setState("error");
       return;
     }
-    setFilename(f.name);
+    setFilename(file.name);
     setState("success");
     onSelectFiles?.(files);
   };
 
-  const onDrop = (e: DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
-    handleFiles(e.dataTransfer.files);
+  const onDrop = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    handleFiles(event.dataTransfer.files);
   };
 
-  const onDragOver = (e: DragEvent<HTMLLabelElement>) => {
-    e.preventDefault();
+  const onDragOver = (event: DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
     setState("dragging");
   };
 
@@ -40,10 +40,12 @@ export function UploadDropzone({ compact = false, onSelectFiles }: UploadDropzon
     <label
       onDrop={onDrop}
       onDragOver={onDragOver}
-      onDragLeave={() => setState((s) => (s === "dragging" ? "idle" : s))}
+      onDragLeave={() =>
+        setState((currentState) => (currentState === "dragging" ? "idle" : currentState))
+      }
       className={cn(
         "group relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed transition-colors",
-        compact ? "px-6 py-8" : "px-8 py-14",
+        compact ? "px-6 py-8" : "px-6 py-12 sm:px-8 sm:py-14",
         state === "dragging" && "border-accent bg-accent/5",
         state === "success" && "border-accent/40 bg-accent/5",
         state === "error" && "border-destructive/40 bg-destructive/5",
@@ -55,7 +57,7 @@ export function UploadDropzone({ compact = false, onSelectFiles }: UploadDropzon
         type="file"
         accept=".epub,application/epub+zip"
         className="sr-only"
-        onChange={(e) => handleFiles(e.target.files)}
+        onChange={(event) => handleFiles(event.target.files)}
       />
 
       {state === "success" ? (
@@ -86,7 +88,7 @@ export function UploadDropzone({ compact = false, onSelectFiles }: UploadDropzon
               {compact ? "Open EPUB file" : "Drag an EPUB file here"}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {compact ? "Tap to choose from your device" : "or tap to browse — .epub up to 50 MB"}
+              {compact ? "Tap to choose from your device" : "or tap to browse - .epub up to 50 MB"}
             </p>
           </div>
         </>

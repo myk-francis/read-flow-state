@@ -1,5 +1,3 @@
-import createEpub from "@intity/epub-js";
-
 const READABLE_BLOCK_SELECTOR = "p, li, blockquote, h1, h2, h3, h4, h5, h6, pre";
 const FRONT_MATTER_PATTERNS = [
   /\btable of contents\b/i,
@@ -25,8 +23,16 @@ export interface EpubTextSection {
   nextHref?: string;
 }
 
+export interface EpubReadingMapItem {
+  href: string;
+  label: string;
+  index: number;
+  progress: number;
+}
+
 export interface EpubTextReader {
   loadSection: (target?: string) => Promise<EpubTextSection>;
+  getReadingMap: () => EpubReadingMapItem[];
   destroy: () => void;
 }
 
@@ -37,6 +43,28 @@ interface EpubTextReaderOptions {
 
 function normalizeText(text: string) {
   return text.replace(/\s+/g, " ").trim();
+}
+
+function humanizeHrefLabel(href: string, index: number) {
+  const decoded = href.split("/").pop()?.split("#")[0] ?? href;
+  const withoutExtension = decoded.replace(/\.[a-z0-9]+$/i, "");
+  const normalized = withoutExtension.replace(/[_-]+/g, " ").trim();
+
+  if (!normalized || /^text\d+$/i.test(normalized) || /^section\d+$/i.test(normalized)) {
+    return `Chapter ${index + 1}`;
+  }
+
+  return normalized.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function extractDocumentTitle(doc?: Document | null) {
+  if (!doc) return null;
+
+  const heading = Array.from(doc.querySelectorAll<HTMLElement>("h1, h2, h3, title"))
+    .map((element) => normalizeText(element.textContent ?? ""))
+    .find(Boolean);
+
+  return heading || null;
 }
 
 function shouldSkipSection(label: string, href: string) {
@@ -93,7 +121,21 @@ function extractParagraphs(doc: Document, options?: EpubTextReaderOptions) {
 }
 
 function getPreferredStartSection(
-  book: Awaited<ReturnType<typeof createEpub>>,
+  book: {
+    sections: {
+      values: () => Iterable<{
+        linear: boolean;
+        href: string;
+        index: number;
+      }>;
+      first: () => unknown;
+    };
+    navigation?: {
+      toc?: {
+        get?: (href: string) => { label?: string } | undefined;
+      };
+    };
+  },
   options?: EpubTextReaderOptions,
 ) {
   const sections = [...book.sections.values()].filter((section) => section.linear);
@@ -110,13 +152,87 @@ function getPreferredStartSection(
   return book.sections.first();
 }
 
+async function buildReadingMap(
+  book: {
+    sections: {
+      values: () => Iterable<{
+        linear: boolean;
+        href: string;
+        index: number;
+        load: (loader: unknown) => Promise<unknown>;
+        document?: Document | null;
+      }>;
+      first: () => unknown;
+      size?: number;
+    };
+    load: unknown;
+    navigation?: {
+      toc?: {
+        get?: (href: string) => { label?: string } | undefined;
+      };
+    };
+  },
+  options?: EpubTextReaderOptions,
+): EpubReadingMapItem[] {
+  const sections = [...book.sections.values()].filter((section) => section.linear);
+  const totalSections = Math.max(sections.length, 1);
+
+  const items: EpubReadingMapItem[] = [];
+
+  for (const section of sections) {
+    const navItem = book.navigation?.toc?.get?.(section.href);
+    let label = navItem?.label?.trim() || "";
+
+    if (!label || label === section.href) {
+      try {
+        await section.load(book.load);
+        label = extractDocumentTitle(section.document) || "";
+      } catch {
+        label = "";
+      }
+    }
+
+    const resolvedLabel = label || humanizeHrefLabel(section.href, section.index);
+    if (shouldSkipSection(resolvedLabel, section.href)) {
+      continue;
+    }
+
+    items.push({
+      href: section.href,
+      label: resolvedLabel,
+      index: section.index,
+      progress: totalSections > 1 ? section.index / (totalSections - 1) : 0,
+    });
+  }
+
+  if (items.length > 0) {
+    return items;
+  }
+
+  const fallback = getPreferredStartSection(book, options);
+  if (!fallback) {
+    return [];
+  }
+
+  return [
+    {
+      href: fallback.href,
+      label: humanizeHrefLabel(fallback.href, fallback.index),
+      index: fallback.index,
+      progress: 0,
+    },
+  ];
+}
+
 export async function createEpubTextReader(
   source: ArrayBuffer,
   options?: EpubTextReaderOptions,
 ): Promise<EpubTextReader> {
+  const [{ default: createEpub }] = await Promise.all([import("@intity/epub-js")]);
   const book = createEpub({ replacements: "blobUrl" });
   await book.open(source, "binary");
   await book.loaded.sections;
+  const readingMap = await buildReadingMap(book, options);
 
   return {
     async loadSection(target?: string) {
@@ -131,10 +247,12 @@ export async function createEpubTextReader(
       const navItem = book.navigation?.toc?.get?.(section.href);
       const totalSections = Math.max(book.sections.size, 1);
       const progress = totalSections > 1 ? section.index / (totalSections - 1) : 0;
+      const documentTitle = extractDocumentTitle(section.document);
 
       return {
         href: section.href,
-        chapter: navItem?.label?.trim() || section.href,
+        chapter:
+          navItem?.label?.trim() || documentTitle || humanizeHrefLabel(section.href, section.index),
         paragraphs:
           paragraphs.length > 0 ? paragraphs : ["This section does not contain readable text."],
         index: section.index,
@@ -143,6 +261,9 @@ export async function createEpubTextReader(
         prevHref: section.prev()?.href,
         nextHref: section.next()?.href,
       };
+    },
+    getReadingMap() {
+      return readingMap;
     },
     destroy() {
       book.destroy();

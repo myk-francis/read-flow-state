@@ -11,7 +11,10 @@ interface Props {
 
 export function MiniPlayer({ book, onClose }: Props) {
   const [playing, setPlaying] = useState(true);
-  const line = book.excerpt[book.activeLine] ?? "";
+  const line =
+    book.source.kind === "local"
+      ? `${Math.round(book.progress * 100)}% • ${book.chapter}`
+      : (book.excerpt[book.activeLine] ?? "");
 
   return (
     <div className="fixed inset-x-3 bottom-3 z-40 mx-auto max-w-md rounded-2xl border border-border bg-card/95 shadow-lg backdrop-blur-md sm:inset-x-6">

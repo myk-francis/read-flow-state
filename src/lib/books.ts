@@ -25,6 +25,7 @@ export interface Book {
   chapter: string;
   locationCfi?: string;
   locationHref?: string;
+  pageIndex?: number;
   coverHue: number;
   coverTone: BookCoverTone;
   excerpt: string[];
@@ -38,6 +39,7 @@ export interface Bookmark {
   id: string;
   bookId: string;
   sectionHref?: string;
+  pageIndex?: number;
   paragraphIndex: number;
   text: string;
   createdAt: string;
@@ -47,6 +49,7 @@ export interface BookNote {
   id: string;
   bookId: string;
   sectionHref?: string;
+  pageIndex?: number;
   paragraphIndex: number;
   anchorText: string;
   content: string;
