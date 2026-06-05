@@ -8,17 +8,20 @@ interface Props {
   onClose: () => void;
   settings: ReaderSettings;
   onChange: (next: ReaderSettings) => void;
+  voices?: string[];
 }
 
-const VOICES = ["Evelyn (Natural)", "Atlas (Warm)", "June (Soft)", "Orion (Deep)"];
+const VOICES = ["Default voice", "Evelyn (Natural)", "Atlas (Warm)", "June (Soft)", "Orion (Deep)"];
 const SPEEDS = [0.8, 1, 1.25, 1.5, 1.75];
 
-export function SettingsSheet({ open, onClose, settings, onChange }: Props) {
+export function SettingsSheet({ open, onClose, settings, onChange, voices }: Props) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     if (open) window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
+
+  const voiceOptions = voices && voices.length > 0 ? voices : VOICES;
 
   return (
     <>
@@ -168,7 +171,7 @@ export function SettingsSheet({ open, onClose, settings, onChange }: Props) {
               Voice
             </label>
             <div className="flex flex-wrap gap-2">
-              {VOICES.map((v) => (
+              {voiceOptions.map((v) => (
                 <button
                   key={v}
                   onClick={() => onChange({ ...settings, voice: v })}

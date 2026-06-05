@@ -27,6 +27,7 @@ interface EpubViewerProps {
 export interface EpubViewerHandle {
   next: () => Promise<void>;
   prev: () => Promise<void>;
+  getVisibleText: () => string;
 }
 
 export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function EpubViewer(
@@ -38,6 +39,7 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
     display?: (target?: string) => Promise<void>;
     prev?: () => Promise<void>;
     next?: () => Promise<void>;
+    getContents?: () => Array<{ document?: Document }>;
     destroy?: () => void;
     on?: (
       event: string,
@@ -56,6 +58,13 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
       prev: async () => {
         await renditionRef.current?.prev?.();
       },
+      getVisibleText: () => {
+        const contents = renditionRef.current?.getContents?.() ?? [];
+        return contents
+          .map((content) => content.document?.body?.innerText?.trim() ?? "")
+          .filter(Boolean)
+          .join("\n\n");
+      },
     }),
     [],
   );
@@ -71,6 +80,7 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
         display?: (target?: string) => Promise<void>;
         prev?: () => Promise<void>;
         next?: () => Promise<void>;
+        getContents?: () => Array<{ document?: Document }>;
         destroy?: () => void;
         on?: (
           event: string,
@@ -84,6 +94,7 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
       display?: (target?: string) => Promise<void>;
       prev?: () => Promise<void>;
       next?: () => Promise<void>;
+      getContents?: () => Array<{ document?: Document }>;
       on?: (
         event: string,
         cb: (location: { start?: { cfi?: string; href?: string; percentage?: number } }) => void,

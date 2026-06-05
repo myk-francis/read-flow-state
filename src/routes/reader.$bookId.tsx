@@ -30,8 +30,11 @@ function ReaderPage() {
   const [playing, setPlaying] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bookData, setBookData] = useState<ArrayBuffer | null>(null);
+  const [availableVoices, setAvailableVoices] = useState<string[]>([]);
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
   const viewerRef = useRef<EpubViewerHandle | null>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const localSpeechRestartKeyRef = useRef<string | null>(null);
 
   const book = books.find((entry) => entry.id === bookId) ?? null;
   const isLocalBook = book?.source.kind === "local";
@@ -44,11 +47,33 @@ function ReaderPage() {
   }, [book, setCurrentBookId]);
 
   useEffect(() => {
+    if (!book) return;
+    if (isLocalBook) {
+      setPlaying(false);
+      return;
+    }
+    setPlaying(true);
+  }, [book?.id, isLocalBook, book]);
+
+  useEffect(() => {
     const root = document.documentElement;
     if (readerSettings.theme === "dark") root.classList.add("dark");
     else root.classList.remove("dark");
     return () => root.classList.remove("dark");
   }, [readerSettings.theme]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+    const readVoices = () => {
+      const voices = window.speechSynthesis.getVoices().map((voice) => voice.name);
+      setAvailableVoices(voices.length > 0 ? voices : ["Default voice"]);
+    };
+
+    readVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", readVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", readVoices);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +135,14 @@ function ReaderPage() {
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [activeLine, book, isLocalBook]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    return () => {
+      window.speechSynthesis.cancel();
+      utteranceRef.current = null;
+    };
+  }, []);
+
   if (!book) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4 text-center">
@@ -125,6 +158,72 @@ function ReaderPage() {
 
   const progress = isLocalBook ? book.progress : (activeLine + 1) / book.excerpt.length;
   const progressPercent = Math.round(progress * 100);
+  const speechSupported = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  const stopLocalSpeech = () => {
+    if (!speechSupported) return;
+    window.speechSynthesis.cancel();
+    utteranceRef.current = null;
+    localSpeechRestartKeyRef.current = null;
+    setPlaying(false);
+  };
+
+  const startLocalSpeech = () => {
+    if (!speechSupported) return;
+    const text = viewerRef.current?.getVisibleText().trim() ?? "";
+    if (!text) return;
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = readerSettings.speed;
+
+    const selectedVoice =
+      window.speechSynthesis
+        .getVoices()
+        .find((voice) => voice.name === readerSettings.voice || readerSettings.voice === "Default voice") ?? null;
+
+    if (selectedVoice && readerSettings.voice !== "Default voice") {
+      utterance.voice = selectedVoice;
+    }
+
+    utterance.onend = () => {
+      utteranceRef.current = null;
+      localSpeechRestartKeyRef.current = null;
+      setPlaying(false);
+    };
+
+    utterance.onerror = () => {
+      utteranceRef.current = null;
+      localSpeechRestartKeyRef.current = null;
+      setPlaying(false);
+    };
+
+    utteranceRef.current = utterance;
+    localSpeechRestartKeyRef.current = `${book.id}:${book.locationCfi ?? book.locationHref ?? "start"}:${readerSettings.speed}:${readerSettings.voice}`;
+    window.speechSynthesis.speak(utterance);
+    setPlaying(true);
+  };
+
+  useEffect(() => {
+    if (!isLocalBook || !playing || !book) return;
+    if (!speechSupported) return;
+
+    const nextKey = `${book.id}:${book.locationCfi ?? book.locationHref ?? "start"}:${readerSettings.speed}:${readerSettings.voice}`;
+    if (localSpeechRestartKeyRef.current === nextKey) return;
+
+    startLocalSpeech();
+  }, [
+    book,
+    book?.id,
+    book?.locationCfi,
+    book?.locationHref,
+    isLocalBook,
+    playing,
+    readerSettings.speed,
+    readerSettings.voice,
+    speechSupported,
+  ]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -234,7 +333,7 @@ function ReaderPage() {
 
           <div className="flex items-center justify-between">
             <button
-              disabled={isLocalBook}
+              disabled={isLocalBook && !speechSupported}
               onClick={() =>
                 setReaderSettings({
                   ...readerSettings,
@@ -246,9 +345,15 @@ function ReaderPage() {
               }
               className={cn(
                 "min-w-12 rounded-full px-2 py-1 text-xs font-semibold tabular-nums text-muted-foreground",
-                isLocalBook ? "cursor-not-allowed opacity-40" : "hover:text-foreground",
+                isLocalBook && !speechSupported
+                  ? "cursor-not-allowed opacity-40"
+                  : "hover:text-foreground",
               )}
-              aria-label={isLocalBook ? "Reading speed available once audio is enabled" : "Reading speed"}
+              aria-label={
+                isLocalBook && !speechSupported
+                  ? "Speech synthesis is not available in this browser"
+                  : "Reading speed"
+              }
             >
               {readerSettings.speed}x
             </button>
@@ -268,15 +373,32 @@ function ReaderPage() {
                 <ChevronLeft className="size-6" />
               </button>
               <button
-                onClick={() => setPlaying((isPlaying) => !isPlaying)}
+                onClick={() => {
+                  if (isLocalBook) {
+                    if (playing) {
+                      stopLocalSpeech();
+                    } else {
+                      startLocalSpeech();
+                    }
+                    return;
+                  }
+
+                  setPlaying((isPlaying) => !isPlaying);
+                }}
                 className={cn(
                   "grid size-14 place-items-center rounded-full bg-accent text-accent-foreground shadow-lg shadow-accent/30 transition-transform",
-                  isLocalBook ? "cursor-not-allowed opacity-60" : "hover:scale-[1.03] active:scale-95",
+                  isLocalBook && !speechSupported
+                    ? "cursor-not-allowed opacity-60"
+                    : "hover:scale-[1.03] active:scale-95",
                 )}
                 aria-label={
-                  isLocalBook ? "Audio playback will be enabled next" : playing ? "Pause" : "Play"
+                  isLocalBook && !speechSupported
+                    ? "Speech synthesis is not available in this browser"
+                    : playing
+                      ? "Pause"
+                      : "Play"
                 }
-                disabled={isLocalBook}
+                disabled={isLocalBook && !speechSupported}
               >
                 {playing ? <Pause className="size-6" /> : <Play className="ml-0.5 size-6" />}
               </button>
@@ -329,6 +451,7 @@ function ReaderPage() {
         onClose={() => setSettingsOpen(false)}
         settings={readerSettings}
         onChange={setReaderSettings}
+        voices={availableVoices}
       />
     </div>
   );
