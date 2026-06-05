@@ -34,10 +34,32 @@ export interface Book {
   source: BookSource;
 }
 
+export interface Bookmark {
+  id: string;
+  bookId: string;
+  sectionHref?: string;
+  paragraphIndex: number;
+  text: string;
+  createdAt: string;
+}
+
+export interface BookNote {
+  id: string;
+  bookId: string;
+  sectionHref?: string;
+  paragraphIndex: number;
+  anchorText: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LibraryState {
   books: Book[];
   currentBookId: string | null;
   readerSettings: ReaderSettings;
+  bookmarks: Bookmark[];
+  notes: BookNote[];
 }
 
 export const DEFAULT_READER_SETTINGS: ReaderSettings = {
@@ -132,9 +154,7 @@ export const demoBooks: Book[] = [
     activeLine: 0,
     importedAt: now,
     source: { kind: "demo" },
-    excerpt: [
-      "It is the time you have wasted for your rose that makes your rose so important.",
-    ],
+    excerpt: ["It is the time you have wasted for your rose that makes your rose so important."],
   },
   {
     id: "ulysses",
@@ -158,5 +178,7 @@ export function createInitialLibraryState(): LibraryState {
     books: demoBooks,
     currentBookId: demoBooks[0]?.id ?? null,
     readerSettings: DEFAULT_READER_SETTINGS,
+    bookmarks: [],
+    notes: [],
   };
 }

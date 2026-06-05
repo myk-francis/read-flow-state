@@ -67,8 +67,10 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
               <span
                 className={cn(
                   "relative",
-                  settings.highlight === "soft" && "rounded bg-highlight/80 px-1 text-highlight-foreground",
-                  settings.highlight === "underline" && "underline decoration-accent decoration-2 underline-offset-4",
+                  settings.highlight === "soft" &&
+                    "rounded bg-highlight/80 px-1 text-highlight-foreground",
+                  settings.highlight === "underline" &&
+                    "underline decoration-accent decoration-2 underline-offset-4",
                   settings.highlight === "bar" && "border-l-2 border-accent pl-2",
                 )}
               >
@@ -102,7 +104,9 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
               <label className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
                 Line spacing
               </label>
-              <span className="text-xs font-medium tabular-nums">{settings.lineHeight.toFixed(2)}</span>
+              <span className="text-xs font-medium tabular-nums">
+                {settings.lineHeight.toFixed(2)}
+              </span>
             </div>
             <input
               type="range"
@@ -150,7 +154,9 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
                   onClick={() => onChange({ ...settings, theme: t })}
                   className={cn(
                     "flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-xs font-medium capitalize",
-                    settings.theme === t ? "border-accent bg-accent/10 text-accent" : "border-border",
+                    settings.theme === t
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border",
                   )}
                 >
                   <span

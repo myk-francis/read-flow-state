@@ -80,9 +80,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { name: "theme-color", content: "#FBF9F6" },
       { title: "ReadAlong — Read your EPUBs aloud" },
-      { name: "description", content: "A calm, modern EPUB reader that reads your books aloud and highlights every line as it goes." },
+      {
+        name: "description",
+        content:
+          "A calm, modern EPUB reader that reads your books aloud and highlights every line as it goes.",
+      },
       { property: "og:title", content: "ReadAlong — Read your EPUBs aloud" },
-      { property: "og:description", content: "A calm, modern EPUB reader that reads your books aloud and highlights every line as it goes." },
+      {
+        property: "og:description",
+        content:
+          "A calm, modern EPUB reader that reads your books aloud and highlights every line as it goes.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

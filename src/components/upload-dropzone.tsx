@@ -47,7 +47,8 @@ export function UploadDropzone({ compact = false, onSelectFiles }: UploadDropzon
         state === "dragging" && "border-accent bg-accent/5",
         state === "success" && "border-accent/40 bg-accent/5",
         state === "error" && "border-destructive/40 bg-destructive/5",
-        state === "idle" && "border-border bg-muted/40 hover:border-accent/40 hover:bg-accent/[0.03]",
+        state === "idle" &&
+          "border-border bg-muted/40 hover:border-accent/40 hover:bg-accent/[0.03]",
       )}
     >
       <input

@@ -90,9 +90,9 @@
   --highlight: oklch(0.38 0.08 105);
   --highlight-foreground: oklch(0.97 0.02 100);
 
-  --card: oklch(0.20 0.008 80);
+  --card: oklch(0.2 0.008 80);
   --card-foreground: var(--ink);
-  --popover: oklch(0.20 0.008 80);
+  --popover: oklch(0.2 0.008 80);
   --popover-foreground: var(--ink);
 
   --primary: var(--ink);
@@ -113,7 +113,8 @@
     border-color: var(--color-border);
   }
 
-  html, body {
+  html,
+  body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
@@ -128,8 +129,12 @@
 }
 
 @layer utilities {
-  .font-serif { font-family: var(--font-serif); }
-  .font-sans { font-family: var(--font-sans); }
+  .font-serif {
+    font-family: var(--font-serif);
+  }
+  .font-sans {
+    font-family: var(--font-sans);
+  }
 
   /* Reading highlight — luminous, soft, animated */
   .reading-line {
@@ -145,7 +150,9 @@
     z-index: -1;
     opacity: 0;
     transform: scaleY(0.7);
-    transition: opacity 350ms ease, transform 350ms ease;
+    transition:
+      opacity 350ms ease,
+      transform 350ms ease;
   }
   .reading-line[data-active="true"]::before {
     opacity: 1;

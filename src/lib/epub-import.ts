@@ -37,21 +37,24 @@ export async function importEpubFile(file: File): Promise<{ assetId: string; boo
     file.arrayBuffer(),
   ]);
 
-  const epub = createEpub(arrayBuffer);
+  const epub = createEpub({ replacements: "blobUrl" });
 
   try {
-    const [metadata, navigation] = await Promise.all([
-      epub.loaded.metadata,
-      epub.loaded.navigation.catch(() => []),
-    ]);
+    await epub.open(arrayBuffer, "binary");
+
+    const metadata = epub.packaging?.metadata;
+    const navigation = await epub.loaded.navigation.catch(() => []);
+
+    const metadataTitle = metadata?.get?.("title");
+    const metadataCreator = metadata?.get?.("creator");
 
     const title =
-      typeof metadata?.title === "string" && metadata.title.trim()
-        ? metadata.title.trim()
+      typeof metadataTitle === "string" && metadataTitle.trim()
+        ? metadataTitle.trim()
         : file.name.replace(/\.epub$/i, "");
     const author =
-      typeof metadata?.creator === "string" && metadata.creator.trim()
-        ? metadata.creator.trim()
+      typeof metadataCreator === "string" && metadataCreator.trim()
+        ? metadataCreator.trim()
         : "Unknown author";
 
     const hash = hashString(`${title}:${author}:${file.name}:${file.size}`);

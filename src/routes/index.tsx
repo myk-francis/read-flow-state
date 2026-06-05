@@ -9,9 +9,17 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "ReadAlong — Read your EPUBs aloud" },
-      { name: "description", content: "A calm, modern EPUB reader that reads books aloud and highlights every line as it goes." },
+      {
+        name: "description",
+        content:
+          "A calm, modern EPUB reader that reads books aloud and highlights every line as it goes.",
+      },
       { property: "og:title", content: "ReadAlong — Read your EPUBs aloud" },
-      { property: "og:description", content: "A calm, modern EPUB reader that reads books aloud and highlights every line as it goes." },
+      {
+        property: "og:description",
+        content:
+          "A calm, modern EPUB reader that reads books aloud and highlights every line as it goes.",
+      },
     ],
   }),
   component: Home,
@@ -21,7 +29,9 @@ function Home() {
   const navigate = useNavigate();
   const { books, currentBook, importing, importBook, setCurrentBookId } = useLibrary();
   const current = currentBook ?? books[0] ?? null;
-  const recent = current ? books.filter((book) => book.id !== current.id).slice(0, 4) : books.slice(0, 4);
+  const recent = current
+    ? books.filter((book) => book.id !== current.id).slice(0, 4)
+    : books.slice(0, 4);
 
   const handleSelectedFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -101,37 +111,37 @@ function Home() {
         {/* Continue reading */}
         {current ? (
           <section className="mb-10">
-          <div className="mb-4 flex items-end justify-between">
-            <h2 className="text-lg font-semibold tracking-tight">Continue reading</h2>
-            <Link to="/library" className="text-sm font-medium text-accent">
-              View all
-            </Link>
-          </div>
+            <div className="mb-4 flex items-end justify-between">
+              <h2 className="text-lg font-semibold tracking-tight">Continue reading</h2>
+              <Link to="/library" className="text-sm font-medium text-accent">
+                View all
+              </Link>
+            </div>
 
-          <Link
-            to="/reader/$bookId"
-            params={{ bookId: current.id }}
-            onClick={() => setCurrentBookId(current.id)}
-            className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/50"
-          >
-            <div className="w-20 shrink-0">
-              <BookCover book={current} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="truncate font-serif text-lg leading-tight">{current.title}</h3>
-              <p className="truncate text-sm text-muted-foreground">{current.author}</p>
-              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full rounded-full bg-accent"
-                  style={{ width: `${current.progress * 100}%` }}
-                />
+            <Link
+              to="/reader/$bookId"
+              params={{ bookId: current.id }}
+              onClick={() => setCurrentBookId(current.id)}
+              className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/50"
+            >
+              <div className="w-20 shrink-0">
+                <BookCover book={current} />
               </div>
-              <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-                {Math.round(current.progress * 100)}% • {current.chapter}
-              </p>
-            </div>
-            <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-          </Link>
+              <div className="min-w-0 flex-1">
+                <h3 className="truncate font-serif text-lg leading-tight">{current.title}</h3>
+                <p className="truncate text-sm text-muted-foreground">{current.author}</p>
+                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-accent"
+                    style={{ width: `${current.progress * 100}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {Math.round(current.progress * 100)}% • {current.chapter}
+                </p>
+              </div>
+              <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+            </Link>
           </section>
         ) : null}
 

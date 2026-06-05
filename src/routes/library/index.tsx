@@ -1,23 +1,26 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Search, SlidersHorizontal } from "lucide-react";
+import { ArrowLeft, Search, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { BookCover } from "@/components/book-cover";
 import { useLibrary } from "@/components/library-provider";
 
-export const Route = createFileRoute("/library")({
+export const Route = createFileRoute("/library/")({
   head: () => ({
     meta: [
       { title: "Library — ReadAlong" },
       { name: "description", content: "Your imported EPUB books, organized for calm browsing." },
       { property: "og:title", content: "Library — ReadAlong" },
-      { property: "og:description", content: "Your imported EPUB books, organized for calm browsing." },
+      {
+        property: "og:description",
+        content: "Your imported EPUB books, organized for calm browsing.",
+      },
     ],
   }),
   component: LibraryPage,
 });
 
 function LibraryPage() {
-  const { books, setCurrentBookId } = useLibrary();
+  const { books, removeBook, setCurrentBookId } = useLibrary();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "reading" | "finished" | "unread">("all");
 
@@ -32,7 +35,13 @@ function LibraryPage() {
       if (filter === "unread") return b.progress === 0;
       return true;
     });
-  }, [query, filter]);
+  }, [books, filter, query]);
+
+  const handleDeleteBook = async (bookId: string, title: string) => {
+    const confirmed = window.confirm(`Delete "${title}" from your library?`);
+    if (!confirmed) return;
+    await removeBook(bookId);
+  };
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -88,9 +97,7 @@ function LibraryPage() {
         {/* Grid */}
         {filtered.length === 0 ? (
           <div className="mt-16 text-center">
-            <p className="font-serif text-xl italic text-muted-foreground">
-              Nothing here yet.
-            </p>
+            <p className="font-serif text-xl italic text-muted-foreground">Nothing here yet.</p>
             <p className="mt-2 text-sm text-muted-foreground">
               Try a different search or import a new EPUB.
             </p>
@@ -98,23 +105,33 @@ function LibraryPage() {
         ) : (
           <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4">
             {filtered.map((b) => (
-              <Link
-                key={b.id}
-                to="/reader/$bookId"
-                params={{ bookId: b.id }}
-                onClick={() => setCurrentBookId(b.id)}
-                className="group block"
-              >
-                <BookCover book={b} className="transition-transform group-hover:-translate-y-0.5" />
-                <p className="mt-3 truncate text-sm font-medium">{b.title}</p>
-                <p className="truncate text-xs text-muted-foreground">{b.author}</p>
-                <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full bg-accent"
-                    style={{ width: `${b.progress * 100}%` }}
+              <div key={b.id} className="group relative">
+                <Link
+                  to="/reader/$bookId"
+                  params={{ bookId: b.id }}
+                  onClick={() => setCurrentBookId(b.id)}
+                  className="block"
+                >
+                  <BookCover
+                    book={b}
+                    className="transition-transform group-hover:-translate-y-0.5"
                   />
-                </div>
-              </Link>
+                  <p className="mt-3 truncate pr-10 text-sm font-medium">{b.title}</p>
+                  <p className="truncate text-xs text-muted-foreground">{b.author}</p>
+                  <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-muted">
+                    <div className="h-full bg-accent" style={{ width: `${b.progress * 100}%` }} />
+                  </div>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteBook(b.id, b.title)}
+                  className="absolute right-0 top-0 grid size-8 place-items-center rounded-full border border-border bg-background/95 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                  aria-label={`Delete ${b.title}`}
+                  title={`Delete ${b.title}`}
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
             ))}
           </div>
         )}

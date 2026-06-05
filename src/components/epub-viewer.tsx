@@ -1,10 +1,4 @@
-import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 import type { ReaderSettings } from "@/lib/books";
 
@@ -37,10 +31,12 @@ export interface EpubViewerHandle {
 }
 
 function getReadableBlocks(doc: Document) {
-  return Array.from(doc.querySelectorAll<HTMLElement>(READABLE_BLOCK_SELECTOR)).filter((element) => {
-    const text = element.innerText?.trim() ?? "";
-    return text.length > 0;
-  });
+  return Array.from(doc.querySelectorAll<HTMLElement>(READABLE_BLOCK_SELECTOR)).filter(
+    (element) => {
+      const text = element.innerText?.trim() ?? "";
+      return text.length > 0;
+    },
+  );
 }
 
 function ensureSpeechStyles(doc: Document, highlightStyle: ReaderSettings["highlight"]) {
@@ -50,6 +46,7 @@ function ensureSpeechStyles(doc: Document, highlightStyle: ReaderSettings["highl
   style.textContent = `
     [data-readflow-block] {
       transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, opacity 180ms ease;
+      --readflow-progress: 0%;
     }
     [data-readflow-block][data-readflow-state="inactive"] {
       opacity: 0.58;
@@ -58,20 +55,42 @@ function ensureSpeechStyles(doc: Document, highlightStyle: ReaderSettings["highl
       opacity: 1;
     }
     [data-readflow-highlight="soft"] [data-readflow-block][data-readflow-state="active"] {
-      background: rgba(182, 214, 141, 0.34);
+      background:
+        linear-gradient(
+          to right,
+          rgba(182, 214, 141, 0.42) 0,
+          rgba(182, 214, 141, 0.42) var(--readflow-progress),
+          rgba(182, 214, 141, 0.18) var(--readflow-progress),
+          rgba(182, 214, 141, 0.18) 100%
+        );
       border-radius: 0.35rem;
       box-shadow: inset 0 0 0 1px rgba(126, 168, 74, 0.15);
     }
     [data-readflow-highlight="underline"] [data-readflow-block][data-readflow-state="active"] {
-      text-decoration: underline;
-      text-decoration-thickness: 2px;
-      text-decoration-color: rgba(95, 138, 54, 0.9);
-      text-underline-offset: 0.28em;
+      background-image:
+        linear-gradient(
+          to right,
+          rgba(95, 138, 54, 0.95) 0,
+          rgba(95, 138, 54, 0.95) var(--readflow-progress),
+          rgba(95, 138, 54, 0.22) var(--readflow-progress),
+          rgba(95, 138, 54, 0.22) 100%
+        );
+      background-repeat: no-repeat;
+      background-size: 100% 2px;
+      background-position: 0 calc(100% - 0.08em);
     }
     [data-readflow-highlight="bar"] [data-readflow-block][data-readflow-state="active"] {
       border-left: 3px solid rgba(95, 138, 54, 0.95);
       padding-left: 0.75rem;
       margin-left: -0.75rem;
+      background:
+        linear-gradient(
+          to right,
+          rgba(182, 214, 141, 0.28) 0,
+          rgba(182, 214, 141, 0.28) var(--readflow-progress),
+          rgba(182, 214, 141, 0.12) var(--readflow-progress),
+          rgba(182, 214, 141, 0.12) 100%
+        );
     }
   `;
 
@@ -101,29 +120,48 @@ function updateSpeechHighlight(
       const end = start + text.length;
       const nextOffset = end + 2;
       let state = "idle";
+      let progress = 0;
 
       if (charIndex == null) {
         state = "idle";
       } else if (charIndex >= start && charIndex <= end) {
         state = "active";
+        progress =
+          text.length > 0 ? Math.max(0, Math.min(1, (charIndex - start) / text.length)) : 0;
       } else if (charIndex > end) {
         state = "inactive";
+        progress = 1;
       } else {
         state = "idle";
+        progress = 0;
       }
 
       block.setAttribute("data-readflow-block", `${blockIndex}`);
       block.setAttribute("data-readflow-state", state);
+      block.style.setProperty("--readflow-progress", `${Math.round(progress * 100)}%`);
+      if (state === "active") {
+        block.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
       runningOffset = nextOffset;
     });
   });
 }
 
 export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function EpubViewer(
-  { source, className, initialLocationCfi, initialLocationHref, highlightStyle = "soft", onLocationChange },
+  {
+    source,
+    className,
+    initialLocationCfi,
+    initialLocationHref,
+    highlightStyle = "soft",
+    onLocationChange,
+  },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const onLocationChangeRef = useRef(onLocationChange);
+  const initialLocationRef = useRef(initialLocationCfi ?? initialLocationHref);
+  const highlightStyleRef = useRef<ReaderSettings["highlight"]>(highlightStyle);
   const renditionRef = useRef<{
     display?: (target?: string) => Promise<void>;
     prev?: () => Promise<void>;
@@ -138,6 +176,14 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
   const speechProgressRef = useRef<number | null>(null);
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    onLocationChangeRef.current = onLocationChange;
+  }, [onLocationChange]);
+
+  useEffect(() => {
+    highlightStyleRef.current = highlightStyle;
+  }, [highlightStyle]);
 
   useImperativeHandle(
     ref,
@@ -159,21 +205,24 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
       setSpeechProgress: (charIndex: number) => {
         speechProgressRef.current = charIndex;
         const contents = renditionRef.current?.getContents?.() ?? [];
-        updateSpeechHighlight(contents, highlightStyle, charIndex);
+        updateSpeechHighlight(contents, highlightStyleRef.current, charIndex);
       },
       clearSpeechHighlight: () => {
         speechProgressRef.current = null;
         const contents = renditionRef.current?.getContents?.() ?? [];
-        updateSpeechHighlight(contents, highlightStyle, null);
+        updateSpeechHighlight(contents, highlightStyleRef.current, null);
       },
     }),
-    [highlightStyle],
+    [],
   );
 
   useEffect(() => {
     let cancelled = false;
+    let destroyed = false;
+    let openPromise: Promise<unknown> | null = null;
     let bookInstance: {
       destroy?: () => void;
+      open?: (input: ArrayBuffer | string, openAs?: string) => Promise<unknown>;
       renderTo?: (
         element: HTMLDivElement,
         options: Record<string, unknown>,
@@ -202,6 +251,44 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
       ) => void;
     } | null = null;
 
+    const destroyViewer = () => {
+      if (destroyed) return;
+      destroyed = true;
+
+      renditionRef.current = null;
+
+      const viewport = (
+        renditionInstance as {
+          viewport?: {
+            resized?: (entries: unknown[]) => void;
+            rect?: object | undefined;
+            resizeFunc?: { disconnect?: () => void };
+          } | null;
+        } | null
+      )?.viewport;
+      if (viewport) {
+        viewport.resized = () => {};
+        viewport.rect = viewport.rect ?? {};
+        try {
+          viewport.resizeFunc?.disconnect?.();
+        } catch (error) {
+          console.warn("Failed to disconnect viewport resize observer cleanly", error);
+        }
+      }
+
+      try {
+        renditionInstance?.destroy?.();
+      } catch (error) {
+        console.warn("Failed to dispose rendition cleanly", error);
+      }
+
+      try {
+        bookInstance?.destroy?.();
+      } catch (error) {
+        console.warn("Failed to dispose book cleanly", error);
+      }
+    };
+
     const mountViewer = async () => {
       if (!containerRef.current) return;
 
@@ -212,7 +299,14 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
         const [{ default: createEpub }] = await Promise.all([import("@intity/epub-js")]);
         if (cancelled || !containerRef.current) return;
 
-        bookInstance = createEpub(source);
+        bookInstance = createEpub({ replacements: "blobUrl" });
+        openPromise = bookInstance.open?.(source, "binary") ?? null;
+        await openPromise;
+        if (cancelled || !containerRef.current) {
+          destroyViewer();
+          return;
+        }
+
         renditionInstance = bookInstance.renderTo?.(containerRef.current, {
           width: "100%",
           height: "100%",
@@ -226,9 +320,11 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
         renditionInstance.on?.("relocated", (location) => {
           const href = location?.start?.href;
           const chapterLabel =
-            href && bookInstance?.navigation?.get ? bookInstance.navigation.get(href)?.label : undefined;
+            href && bookInstance?.navigation?.get
+              ? bookInstance.navigation.get(href)?.label
+              : undefined;
 
-          onLocationChange?.({
+          onLocationChangeRef.current?.({
             cfi: location?.start?.cfi,
             href,
             percentage: location?.start?.percentage,
@@ -236,10 +332,15 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
           });
 
           const contents = renditionRef.current?.getContents?.() ?? [];
-          updateSpeechHighlight(contents, highlightStyle, speechProgressRef.current);
+          updateSpeechHighlight(contents, highlightStyleRef.current, speechProgressRef.current);
         });
 
-        await renditionInstance.display?.(initialLocationCfi ?? initialLocationHref);
+        await renditionInstance.display?.(initialLocationRef.current);
+        if (cancelled) {
+          destroyViewer();
+          return;
+        }
+
         if (!cancelled) {
           setStatus("ready");
         }
@@ -248,6 +349,8 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
         if (!cancelled) {
           setStatus("error");
           setErrorMessage(error instanceof Error ? error.message : "Unable to open this EPUB.");
+        } else {
+          destroyViewer();
         }
       }
     };
@@ -256,11 +359,18 @@ export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function
 
     return () => {
       cancelled = true;
-      renditionRef.current = null;
-      renditionInstance?.destroy?.();
-      bookInstance?.destroy?.();
+      speechProgressRef.current = null;
+
+      if (openPromise) {
+        void openPromise.finally(() => {
+          destroyViewer();
+        });
+        return;
+      }
+
+      destroyViewer();
     };
-  }, [highlightStyle, initialLocationCfi, initialLocationHref, onLocationChange, source]);
+  }, [source]);
 
   useEffect(() => {
     const contents = renditionRef.current?.getContents?.() ?? [];

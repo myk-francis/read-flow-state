@@ -24,11 +24,7 @@ export function MiniPlayer({ book, onClose }: Props) {
         >
           <BookCover book={book} size="sm" />
         </Link>
-        <Link
-          to="/reader/$bookId"
-          params={{ bookId: book.id }}
-          className="min-w-0 flex-1"
-        >
+        <Link to="/reader/$bookId" params={{ bookId: book.id }} className="min-w-0 flex-1">
           <p className="truncate text-xs font-semibold">{book.title}</p>
           <p className="truncate text-[11px] italic text-muted-foreground">
             {playing ? line : "Paused"}

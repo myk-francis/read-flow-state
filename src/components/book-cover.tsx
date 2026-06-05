@@ -5,7 +5,7 @@ const toneStyles: Record<Book["coverTone"], { bg: string; ink: string; band: str
   warm: { bg: "oklch(0.86 0.05 60)", ink: "oklch(0.28 0.04 50)", band: "oklch(0.55 0.08 40)" },
   cool: { bg: "oklch(0.84 0.04 230)", ink: "oklch(0.24 0.04 240)", band: "oklch(0.45 0.08 230)" },
   sage: { bg: "oklch(0.86 0.04 145)", ink: "oklch(0.26 0.04 150)", band: "oklch(0.45 0.06 145)" },
-  ink:  { bg: "oklch(0.22 0.01 60)", ink: "oklch(0.92 0.01 80)", band: "oklch(0.55 0.04 60)" },
+  ink: { bg: "oklch(0.22 0.01 60)", ink: "oklch(0.92 0.01 80)", band: "oklch(0.55 0.04 60)" },
 };
 
 interface Props {
@@ -23,7 +23,7 @@ export function BookCover({ book, className, size = "md" }: Props) {
   return (
     <div
       className={cn(
-        "relative aspect-[2/3] w-full overflow-hidden rounded-md shadow-sm ring-1 ring-black/5",
+        "relative aspect-2/3 w-full overflow-hidden rounded-md shadow-sm ring-1 ring-black/5",
         padding,
         className,
       )}
