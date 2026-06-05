@@ -60,7 +60,7 @@ function ReaderPageRoute() {
     updateBook,
   } = useLibrary();
 
-  const [playing, setPlaying] = useState(true);
+  const [playing, setPlaying] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [readingMapOpen, setReadingMapOpen] = useState(false);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
@@ -485,8 +485,8 @@ function ReaderPageRoute() {
 
   useEffect(() => {
     if (!currentBookId) return;
-    setPlaying(!isLocalBook);
-  }, [currentBookId, isLocalBook]);
+    setPlaying(false);
+  }, [currentBookId]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -843,7 +843,7 @@ function ReaderPageRoute() {
                   if (playing) {
                     stopSpeech();
                   } else {
-                    setPlaying(true);
+                    speak();
                   }
                 }}
                 className={cn(

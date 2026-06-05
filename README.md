@@ -2,6 +2,14 @@
 
 ReadAlong is a browser-based EPUB reader that reads books aloud, keeps your place, and gives you a cleaner reading surface than raw EPUB layouts.
 
+## Live project
+
+After GitHub Pages finishes deploying, the app will be available at:
+
+```text
+https://myk-francis.github.io/read-flow-state/
+```
+
 ## Local development
 
 Install dependencies:
@@ -32,12 +40,6 @@ npm run format
 ## GitHub Pages deployment
 
 This repository is already configured for GitHub Pages deployment through GitHub Actions.
-
-Published site URL:
-
-```text
-https://myk-francis.github.io/read-flow-state/
-```
 
 ### One-time GitHub setup
 

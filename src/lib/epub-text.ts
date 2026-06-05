@@ -45,6 +45,20 @@ function normalizeText(text: string) {
   return text.replace(/\s+/g, " ").trim();
 }
 
+function splitIntoReadingLines(blocks: string[]) {
+  const lines = blocks.flatMap((block) => {
+    const normalized = normalizeText(block);
+    if (!normalized) return [];
+
+    const sentenceMatches = normalized.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [normalized];
+    const sentences = sentenceMatches.map((sentence) => normalizeText(sentence)).filter(Boolean);
+
+    return sentences.length > 0 ? sentences : [normalized];
+  });
+
+  return lines.length > 0 ? lines : blocks;
+}
+
 function humanizeHrefLabel(href: string, index: number) {
   const decoded = href.split("/").pop()?.split("#")[0] ?? href;
   const withoutExtension = decoded.replace(/\.[a-z0-9]+$/i, "");
@@ -111,12 +125,14 @@ function extractParagraphs(doc: Document, options?: EpubTextReaderOptions) {
     .filter(Boolean);
 
   if (blocks.length > 0) {
-    return sanitizeParagraphs(blocks, options);
+    return splitIntoReadingLines(sanitizeParagraphs(blocks, options));
   }
 
   const fallback = normalizeText(doc.body?.innerText ?? doc.documentElement?.textContent ?? "");
   return fallback
-    ? sanitizeParagraphs(fallback.split(/(?<=[.!?])\s+/).filter(Boolean), options)
+    ? splitIntoReadingLines(
+        sanitizeParagraphs(fallback.split(/(?<=[.!?])\s+/).filter(Boolean), options),
+      )
     : [];
 }
 
