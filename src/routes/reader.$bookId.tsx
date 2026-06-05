@@ -165,6 +165,7 @@ function ReaderPage() {
     window.speechSynthesis.cancel();
     utteranceRef.current = null;
     localSpeechRestartKeyRef.current = null;
+    viewerRef.current?.clearSpeechHighlight();
     setPlaying(false);
   };
 
@@ -187,15 +188,27 @@ function ReaderPage() {
       utterance.voice = selectedVoice;
     }
 
+    utterance.onstart = () => {
+      viewerRef.current?.setSpeechProgress(0);
+    };
+
+    utterance.onboundary = (event) => {
+      if (typeof event.charIndex === "number") {
+        viewerRef.current?.setSpeechProgress(event.charIndex);
+      }
+    };
+
     utterance.onend = () => {
       utteranceRef.current = null;
       localSpeechRestartKeyRef.current = null;
+      viewerRef.current?.clearSpeechHighlight();
       setPlaying(false);
     };
 
     utterance.onerror = () => {
       utteranceRef.current = null;
       localSpeechRestartKeyRef.current = null;
+      viewerRef.current?.clearSpeechHighlight();
       setPlaying(false);
     };
 
@@ -259,6 +272,7 @@ function ReaderPage() {
             className="mx-auto max-w-5xl"
             initialLocationCfi={book.locationCfi}
             initialLocationHref={book.locationHref}
+            highlightStyle={readerSettings.highlight}
             onLocationChange={(location) => {
               updateBook(book.id, (currentBook) => ({
                 ...currentBook,
