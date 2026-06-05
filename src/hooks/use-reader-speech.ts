@@ -38,6 +38,7 @@ export function useReaderSpeech({
   const [availableVoices, setAvailableVoices] = useState<string[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const cancelReasonRef = useRef<"manual" | "transition" | null>(null);
+  const activeSpeechKeyRef = useRef<string | null>(null);
 
   const voiceList = useMemo(() => {
     if (!supported) return [];
@@ -66,6 +67,7 @@ export function useReaderSpeech({
       cancelReasonRef.current = keepPausedState ? "transition" : "manual";
       window.speechSynthesis.cancel();
       utteranceRef.current = null;
+      activeSpeechKeyRef.current = null;
       if (!keepPausedState) {
         setPlaying(false);
       }
@@ -74,7 +76,7 @@ export function useReaderSpeech({
   );
 
   const speak = useCallback(() => {
-    if (!supported || !enabled || !text.trim()) return;
+    if (!supported || !enabled || !text.trim() || !speechKey) return;
 
     cancelReasonRef.current = "transition";
     window.speechSynthesis.cancel();
@@ -112,10 +114,11 @@ export function useReaderSpeech({
     };
 
     utteranceRef.current = utterance;
+    activeSpeechKeyRef.current = speechKey;
     cancelReasonRef.current = null;
     setPlaying(true);
     window.speechSynthesis.speak(utterance);
-  }, [enabled, onEnd, onError, rate, setPlaying, supported, text, voiceList, voiceName]);
+  }, [enabled, onEnd, onError, rate, setPlaying, speechKey, supported, text, voiceList, voiceName]);
 
   useEffect(() => {
     if (!supported || !enabled) {
@@ -131,12 +134,17 @@ export function useReaderSpeech({
       return;
     }
 
+    if (utteranceRef.current && activeSpeechKeyRef.current === speechKey) {
+      return;
+    }
+
     speak();
 
     return () => {
       cancelReasonRef.current = "transition";
       window.speechSynthesis.cancel();
       utteranceRef.current = null;
+      activeSpeechKeyRef.current = null;
     };
   }, [enabled, playing, speak, speechKey, stop, supported, text]);
 
@@ -146,6 +154,7 @@ export function useReaderSpeech({
       cancelReasonRef.current = "manual";
       window.speechSynthesis.cancel();
       utteranceRef.current = null;
+      activeSpeechKeyRef.current = null;
     };
   }, [supported]);
 

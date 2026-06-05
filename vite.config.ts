@@ -8,7 +8,7 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   vite: {
-    base: "/read-flow-state/",
+    base: process.env.NODE_ENV === "production" ? "/read-flow-state/" : "/",
   },
   tanstackStart: {
     spa: {
