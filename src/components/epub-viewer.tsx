@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { LoaderCircle } from "lucide-react";
 
 type ViewerStatus = "idle" | "loading" | "ready" | "error";
@@ -7,31 +13,77 @@ export interface ViewerLocation {
   cfi?: string;
   href?: string;
   percentage?: number;
+  chapterLabel?: string;
 }
 
 interface EpubViewerProps {
   source: ArrayBuffer | string;
   className?: string;
   initialLocationCfi?: string;
+  initialLocationHref?: string;
   onLocationChange?: (location: ViewerLocation) => void;
 }
 
-export function EpubViewer({
-  source,
-  className,
-  initialLocationCfi,
-  onLocationChange,
-}: EpubViewerProps) {
+export interface EpubViewerHandle {
+  next: () => Promise<void>;
+  prev: () => Promise<void>;
+}
+
+export const EpubViewer = forwardRef<EpubViewerHandle, EpubViewerProps>(function EpubViewer(
+  { source, className, initialLocationCfi, initialLocationHref, onLocationChange },
+  ref,
+) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const renditionRef = useRef<{
+    display?: (target?: string) => Promise<void>;
+    prev?: () => Promise<void>;
+    next?: () => Promise<void>;
+    destroy?: () => void;
+    on?: (
+      event: string,
+      cb: (location: { start?: { cfi?: string; href?: string; percentage?: number } }) => void,
+    ) => void;
+  } | null>(null);
   const [status, setStatus] = useState<ViewerStatus>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      next: async () => {
+        await renditionRef.current?.next?.();
+      },
+      prev: async () => {
+        await renditionRef.current?.prev?.();
+      },
+    }),
+    [],
+  );
+
   useEffect(() => {
     let cancelled = false;
-    let bookInstance: { destroy?: () => void } | null = null;
+    let bookInstance: {
+      destroy?: () => void;
+      renderTo?: (
+        element: HTMLDivElement,
+        options: Record<string, unknown>,
+      ) => {
+        display?: (target?: string) => Promise<void>;
+        prev?: () => Promise<void>;
+        next?: () => Promise<void>;
+        destroy?: () => void;
+        on?: (
+          event: string,
+          cb: (location: { start?: { cfi?: string; href?: string; percentage?: number } }) => void,
+        ) => void;
+      };
+      navigation?: { get?: (href: string) => { label?: string } | undefined };
+    } | null = null;
     let renditionInstance: {
       destroy?: () => void;
       display?: (target?: string) => Promise<void>;
+      prev?: () => Promise<void>;
+      next?: () => Promise<void>;
       on?: (
         event: string,
         cb: (location: { start?: { cfi?: string; href?: string; percentage?: number } }) => void,
@@ -49,7 +101,7 @@ export function EpubViewer({
         if (cancelled || !containerRef.current) return;
 
         bookInstance = createEpub(source);
-        renditionInstance = bookInstance.renderTo(containerRef.current, {
+        renditionInstance = bookInstance.renderTo?.(containerRef.current, {
           width: "100%",
           height: "100%",
           manager: "continuous",
@@ -57,15 +109,22 @@ export function EpubViewer({
           pageWidth: 720,
         });
 
+        renditionRef.current = renditionInstance ?? null;
+
         renditionInstance.on?.("relocated", (location) => {
+          const href = location?.start?.href;
+          const chapterLabel =
+            href && bookInstance?.navigation?.get ? bookInstance.navigation.get(href)?.label : undefined;
+
           onLocationChange?.({
             cfi: location?.start?.cfi,
-            href: location?.start?.href,
+            href,
             percentage: location?.start?.percentage,
+            chapterLabel,
           });
         });
 
-        await renditionInstance.display?.(initialLocationCfi);
+        await renditionInstance.display?.(initialLocationCfi ?? initialLocationHref);
         if (!cancelled) {
           setStatus("ready");
         }
@@ -82,10 +141,11 @@ export function EpubViewer({
 
     return () => {
       cancelled = true;
+      renditionRef.current = null;
       renditionInstance?.destroy?.();
       bookInstance?.destroy?.();
     };
-  }, [initialLocationCfi, onLocationChange, source]);
+  }, [initialLocationCfi, initialLocationHref, onLocationChange, source]);
 
   return (
     <div className={className}>
@@ -114,4 +174,4 @@ export function EpubViewer({
       </div>
     </div>
   );
-}
+});

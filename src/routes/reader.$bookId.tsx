@@ -11,7 +11,7 @@ import {
   Sun,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { EpubViewer } from "@/components/epub-viewer";
+import { EpubViewer, type EpubViewerHandle } from "@/components/epub-viewer";
 import { useLibrary } from "@/components/library-provider";
 import { SettingsSheet } from "@/components/settings-sheet";
 import { loadBookAsset } from "@/lib/book-assets";
@@ -31,8 +31,10 @@ function ReaderPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bookData, setBookData] = useState<ArrayBuffer | null>(null);
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  const viewerRef = useRef<EpubViewerHandle | null>(null);
 
   const book = books.find((entry) => entry.id === bookId) ?? null;
+  const isLocalBook = book?.source.kind === "local";
 
   useEffect(() => {
     if (!book) return;
@@ -94,19 +96,19 @@ function ReaderPage() {
   };
 
   useEffect(() => {
-    if (!book || !playing) return;
+    if (!book || !playing || isLocalBook) return;
     const interval = 3800 / readerSettings.speed;
     const id = window.setInterval(() => {
       setActiveLine((line) => (line + 1) % book.excerpt.length);
     }, interval);
     return () => window.clearInterval(id);
-  }, [book, playing, readerSettings.speed]);
+  }, [book, isLocalBook, playing, readerSettings.speed]);
 
   useEffect(() => {
-    if (!book) return;
+    if (!book || isLocalBook) return;
     const el = lineRefs.current[activeLine];
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [activeLine, book]);
+  }, [activeLine, book, isLocalBook]);
 
   if (!book) {
     return (
@@ -121,9 +123,8 @@ function ReaderPage() {
     );
   }
 
-  const progress = (activeLine + 1) / book.excerpt.length;
-  const minutesIn = Math.round(progress * 22);
-  const minutesLeft = 22 - minutesIn;
+  const progress = isLocalBook ? book.progress : (activeLine + 1) / book.excerpt.length;
+  const progressPercent = Math.round(progress * 100);
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -152,16 +153,19 @@ function ReaderPage() {
       </header>
 
       <main className="flex-1 px-6 pb-48 pt-10 sm:px-8 sm:pt-16">
-        {book.source.kind === "local" && bookData ? (
+        {isLocalBook && bookData ? (
           <EpubViewer
+            ref={viewerRef}
             source={bookData}
             className="mx-auto max-w-5xl"
             initialLocationCfi={book.locationCfi}
+            initialLocationHref={book.locationHref}
             onLocationChange={(location) => {
               updateBook(book.id, (currentBook) => ({
                 ...currentBook,
                 locationCfi: location.cfi ?? currentBook.locationCfi,
                 locationHref: location.href ?? currentBook.locationHref,
+                chapter: location.chapterLabel ?? currentBook.chapter,
                 progress:
                   typeof location.percentage === "number"
                     ? Math.max(0, Math.min(1, location.percentage))
@@ -209,7 +213,7 @@ function ReaderPage() {
         <div className="pointer-events-auto mx-auto max-w-lg rounded-3xl border border-border bg-card/95 p-4 shadow-2xl backdrop-blur-md sm:p-5">
           <div className="mb-4 flex items-center gap-3">
             <span className="w-10 text-[10px] font-medium uppercase tracking-widest tabular-nums text-muted-foreground">
-              {minutesIn}m
+              {isLocalBook ? `${progressPercent}%` : `${Math.round(progress * 22)}m`}
             </span>
             <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
               <div
@@ -217,13 +221,20 @@ function ReaderPage() {
                 style={{ width: `${progress * 100}%` }}
               />
             </div>
-            <span className="w-10 text-right text-[10px] font-medium uppercase tracking-widest tabular-nums text-muted-foreground">
-              -{minutesLeft}m
+            <span
+              className={cn(
+                "text-[10px] font-medium uppercase tracking-widest text-muted-foreground",
+                isLocalBook ? "w-24 truncate text-right" : "w-10 text-right tabular-nums",
+              )}
+              title={isLocalBook ? book.chapter : undefined}
+            >
+              {isLocalBook ? book.chapter : `-${22 - Math.round(progress * 22)}m`}
             </span>
           </div>
 
           <div className="flex items-center justify-between">
             <button
+              disabled={isLocalBook}
               onClick={() =>
                 setReaderSettings({
                   ...readerSettings,
@@ -233,31 +244,52 @@ function ReaderPage() {
                       : Math.round((readerSettings.speed + 0.25) * 100) / 100,
                 })
               }
-              className="min-w-12 rounded-full px-2 py-1 text-xs font-semibold tabular-nums text-muted-foreground hover:text-foreground"
-              aria-label="Reading speed"
+              className={cn(
+                "min-w-12 rounded-full px-2 py-1 text-xs font-semibold tabular-nums text-muted-foreground",
+                isLocalBook ? "cursor-not-allowed opacity-40" : "hover:text-foreground",
+              )}
+              aria-label={isLocalBook ? "Reading speed available once audio is enabled" : "Reading speed"}
             >
               {readerSettings.speed}x
             </button>
 
             <div className="flex items-center gap-2 sm:gap-4">
               <button
-                onClick={() => setActiveLine((line) => line - 1)}
+                onClick={() => {
+                  if (isLocalBook) {
+                    void viewerRef.current?.prev();
+                    return;
+                  }
+                  setActiveLine((line) => line - 1);
+                }}
                 className="grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label="Previous line"
+                aria-label={isLocalBook ? "Previous section" : "Previous line"}
               >
                 <ChevronLeft className="size-6" />
               </button>
               <button
                 onClick={() => setPlaying((isPlaying) => !isPlaying)}
-                className="grid size-14 place-items-center rounded-full bg-accent text-accent-foreground shadow-lg shadow-accent/30 transition-transform hover:scale-[1.03] active:scale-95"
-                aria-label={playing ? "Pause" : "Play"}
+                className={cn(
+                  "grid size-14 place-items-center rounded-full bg-accent text-accent-foreground shadow-lg shadow-accent/30 transition-transform",
+                  isLocalBook ? "cursor-not-allowed opacity-60" : "hover:scale-[1.03] active:scale-95",
+                )}
+                aria-label={
+                  isLocalBook ? "Audio playback will be enabled next" : playing ? "Pause" : "Play"
+                }
+                disabled={isLocalBook}
               >
                 {playing ? <Pause className="size-6" /> : <Play className="ml-0.5 size-6" />}
               </button>
               <button
-                onClick={() => setActiveLine((line) => line + 1)}
+                onClick={() => {
+                  if (isLocalBook) {
+                    void viewerRef.current?.next();
+                    return;
+                  }
+                  setActiveLine((line) => line + 1);
+                }}
                 className="grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-                aria-label="Next line"
+                aria-label={isLocalBook ? "Next section" : "Next line"}
               >
                 <ChevronRight className="size-6" />
               </button>
