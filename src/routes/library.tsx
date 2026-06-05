@@ -7,9 +7,9 @@ import { BookCover } from "@/components/book-cover";
 export const Route = createFileRoute("/library")({
   head: () => ({
     meta: [
-      { title: "Library — ReadFlow" },
+      { title: "Library — ReadAlong" },
       { name: "description", content: "Your imported EPUB books, organized for calm browsing." },
-      { property: "og:title", content: "Library — ReadFlow" },
+      { property: "og:title", content: "Library — ReadAlong" },
       { property: "og:description", content: "Your imported EPUB books, organized for calm browsing." },
     ],
   }),

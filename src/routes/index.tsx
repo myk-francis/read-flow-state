@@ -8,9 +8,9 @@ import { MiniPlayer } from "@/components/mini-player";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "ReadFlow — Read your EPUBs aloud" },
+      { title: "ReadAlong — Read your EPUBs aloud" },
       { name: "description", content: "A calm, modern EPUB reader that reads books aloud and highlights every line as it goes." },
-      { property: "og:title", content: "ReadFlow — Read your EPUBs aloud" },
+      { property: "og:title", content: "ReadAlong — Read your EPUBs aloud" },
       { property: "og:description", content: "A calm, modern EPUB reader that reads books aloud and highlights every line as it goes." },
     ],
   }),
@@ -30,7 +30,7 @@ function Home() {
             <div className="grid size-8 place-items-center rounded-lg bg-accent text-accent-foreground">
               <div className="h-0.5 w-4 rounded-full bg-current" />
             </div>
-            <span className="text-lg font-semibold tracking-tight">ReadFlow</span>
+            <span className="text-lg font-semibold tracking-tight">ReadAlong</span>
           </div>
           <div className="flex items-center gap-1">
             <Link
