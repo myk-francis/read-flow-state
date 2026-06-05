@@ -4,7 +4,12 @@ import { cn } from "@/lib/utils";
 
 type State = "idle" | "dragging" | "success" | "error";
 
-export function UploadDropzone({ compact = false }: { compact?: boolean }) {
+interface UploadDropzoneProps {
+  compact?: boolean;
+  onSelectFiles?: (files: FileList) => void;
+}
+
+export function UploadDropzone({ compact = false, onSelectFiles }: UploadDropzoneProps) {
   const [state, setState] = useState<State>("idle");
   const [filename, setFilename] = useState<string>("");
 
@@ -18,6 +23,7 @@ export function UploadDropzone({ compact = false }: { compact?: boolean }) {
     }
     setFilename(f.name);
     setState("success");
+    onSelectFiles?.(files);
   };
 
   const onDrop = (e: DragEvent<HTMLLabelElement>) => {

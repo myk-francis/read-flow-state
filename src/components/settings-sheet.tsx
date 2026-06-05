@@ -1,15 +1,7 @@
 import { useEffect } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-export interface ReaderSettings {
-  fontSize: number; // px
-  lineHeight: number; // multiplier
-  voice: string;
-  speed: number;
-  theme: "light" | "dark";
-  highlight: "soft" | "underline" | "bar";
-}
+import type { ReaderSettings } from "@/lib/books";
 
 interface Props {
   open: boolean;

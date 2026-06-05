@@ -1,90 +1,94 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  Moon,
   Pause,
   Play,
   Settings2,
   Sun,
-  Moon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { getBook, type Book } from "@/lib/books";
-import { SettingsSheet, type ReaderSettings } from "@/components/settings-sheet";
+import { useLibrary } from "@/components/library-provider";
+import { SettingsSheet } from "@/components/settings-sheet";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reader/$bookId")({
-  loader: ({ params }) => {
-    const book = getBook(params.bookId);
-    if (!book) throw notFound();
-    return { book };
-  },
-  head: ({ loaderData }) => ({
-    meta: [
-      { title: `${loaderData?.book.title ?? "Reader"} — ReadAlong` },
-      {
-        name: "description",
-        content: loaderData?.book
-          ? `Listen to ${loaderData.book.title} by ${loaderData.book.author} with synchronized highlighting.`
-          : "ReadAlong reader",
-      },
-    ],
+  head: () => ({
+    meta: [{ title: "Reader - ReadAlong" }, { name: "description", content: "ReadAlong reader" }],
   }),
   component: ReaderPage,
-  notFoundComponent: () => (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 text-center">
-      <div>
-        <p className="font-serif text-2xl italic">We couldn't find that book.</p>
-        <Link to="/library" className="mt-4 inline-block text-sm font-medium text-accent">
-          Back to library
-        </Link>
-      </div>
-    </div>
-  ),
 });
 
-const DEFAULT_SETTINGS: ReaderSettings = {
-  fontSize: 19,
-  lineHeight: 1.65,
-  voice: "Evelyn (Natural)",
-  speed: 1,
-  theme: "light",
-  highlight: "soft",
-};
-
 function ReaderPage() {
-  const { book } = Route.useLoaderData() as { book: Book };
-  const [activeLine, setActiveLine] = useState(book.activeLine);
+  const { bookId } = Route.useParams();
+  const { books, readerSettings, setCurrentBookId, setReaderSettings, updateBook } = useLibrary();
   const [playing, setPlaying] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState<ReaderSettings>(DEFAULT_SETTINGS);
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
 
-  // Toggle dark theme on <html>
+  const book = books.find((entry) => entry.id === bookId) ?? null;
+
+  useEffect(() => {
+    if (!book) return;
+    if (book) {
+      setCurrentBookId(book.id);
+    }
+  }, [book, setCurrentBookId]);
+
   useEffect(() => {
     const root = document.documentElement;
-    if (settings.theme === "dark") root.classList.add("dark");
+    if (readerSettings.theme === "dark") root.classList.add("dark");
     else root.classList.remove("dark");
     return () => root.classList.remove("dark");
-  }, [settings.theme]);
+  }, [readerSettings.theme]);
 
-  // Auto-advance highlighted line while "playing"
+  const activeLine = book?.activeLine ?? 0;
+
+  const setActiveLine = (nextLineOrUpdater: number | ((line: number) => number)) => {
+    if (!book) return;
+    updateBook(book.id, (currentBook) => {
+      const nextLine =
+        typeof nextLineOrUpdater === "function"
+          ? nextLineOrUpdater(currentBook.activeLine)
+          : nextLineOrUpdater;
+
+      return {
+        ...currentBook,
+        activeLine: Math.max(0, Math.min(currentBook.excerpt.length - 1, nextLine)),
+      };
+    });
+  };
+
   useEffect(() => {
-    if (!playing) return;
-    const interval = 3800 / settings.speed;
+    if (!book || !playing) return;
+    const interval = 3800 / readerSettings.speed;
     const id = window.setInterval(() => {
-      setActiveLine((i) => (i + 1) % book.excerpt.length);
+      setActiveLine((line) => (line + 1) % book.excerpt.length);
     }, interval);
     return () => window.clearInterval(id);
-  }, [playing, settings.speed, book.excerpt.length]);
+  }, [book, playing, readerSettings.speed]);
 
-  // Keep highlighted line in view
   useEffect(() => {
+    if (!book) return;
     const el = lineRefs.current[activeLine];
     el?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [activeLine]);
+  }, [activeLine, book]);
+
+  if (!book) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-center">
+        <div>
+          <p className="font-serif text-2xl italic">We couldn't find that book.</p>
+          <Link to="/library" className="mt-4 inline-block text-sm font-medium text-accent">
+            Back to library
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const progress = (activeLine + 1) / book.excerpt.length;
   const minutesIn = Math.round(progress * 22);
@@ -92,7 +96,6 @@ function ReaderPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
-      {/* Top bar */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between px-5">
           <Link
@@ -117,11 +120,10 @@ function ReaderPage() {
         </div>
       </header>
 
-      {/* Reading area */}
       <main className="flex-1 px-6 pb-48 pt-10 sm:px-8 sm:pt-16">
         <article
           className="mx-auto max-w-[60ch] space-y-7 font-serif"
-          style={{ fontSize: settings.fontSize, lineHeight: settings.lineHeight }}
+          style={{ fontSize: readerSettings.fontSize, lineHeight: readerSettings.lineHeight }}
         >
           {book.excerpt.map((line, i) => {
             const active = i === activeLine;
@@ -135,12 +137,12 @@ function ReaderPage() {
                 data-active={active}
                 className={cn(
                   "cursor-pointer text-pretty",
-                  settings.highlight === "soft" && "reading-line",
-                  settings.highlight === "underline" &&
+                  readerSettings.highlight === "soft" && "reading-line",
+                  readerSettings.highlight === "underline" &&
                     (active
                       ? "underline decoration-accent decoration-2 underline-offset-[6px]"
                       : "text-foreground/45"),
-                  settings.highlight === "bar" &&
+                  readerSettings.highlight === "bar" &&
                     (active
                       ? "border-l-2 border-accent pl-3"
                       : "border-l-2 border-transparent pl-3 text-foreground/45"),
@@ -153,10 +155,8 @@ function ReaderPage() {
         </article>
       </main>
 
-      {/* Floating bottom player */}
       <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
         <div className="pointer-events-auto mx-auto max-w-lg rounded-3xl border border-border bg-card/95 p-4 shadow-2xl backdrop-blur-md sm:p-5">
-          {/* Scrubber */}
           <div className="mb-4 flex items-center gap-3">
             <span className="w-10 text-[10px] font-medium uppercase tracking-widest tabular-nums text-muted-foreground">
               {minutesIn}m
@@ -172,44 +172,40 @@ function ReaderPage() {
             </span>
           </div>
 
-          {/* Controls */}
           <div className="flex items-center justify-between">
             <button
               onClick={() =>
-                setSettings((s) => ({
-                  ...s,
-                  speed: s.speed >= 1.75 ? 0.8 : Math.round((s.speed + 0.25) * 100) / 100,
-                }))
+                setReaderSettings({
+                  ...readerSettings,
+                  speed:
+                    readerSettings.speed >= 1.75
+                      ? 0.8
+                      : Math.round((readerSettings.speed + 0.25) * 100) / 100,
+                })
               }
               className="min-w-12 rounded-full px-2 py-1 text-xs font-semibold tabular-nums text-muted-foreground hover:text-foreground"
               aria-label="Reading speed"
             >
-              {settings.speed}x
+              {readerSettings.speed}x
             </button>
 
             <div className="flex items-center gap-2 sm:gap-4">
               <button
-                onClick={() => setActiveLine((i) => Math.max(0, i - 1))}
+                onClick={() => setActiveLine((line) => line - 1)}
                 className="grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="Previous line"
               >
                 <ChevronLeft className="size-6" />
               </button>
               <button
-                onClick={() => setPlaying((p) => !p)}
+                onClick={() => setPlaying((isPlaying) => !isPlaying)}
                 className="grid size-14 place-items-center rounded-full bg-accent text-accent-foreground shadow-lg shadow-accent/30 transition-transform hover:scale-[1.03] active:scale-95"
                 aria-label={playing ? "Pause" : "Play"}
               >
-                {playing ? (
-                  <Pause className="size-6" />
-                ) : (
-                  <Play className="ml-0.5 size-6" />
-                )}
+                {playing ? <Pause className="size-6" /> : <Play className="ml-0.5 size-6" />}
               </button>
               <button
-                onClick={() =>
-                  setActiveLine((i) => Math.min(book.excerpt.length - 1, i + 1))
-                }
+                onClick={() => setActiveLine((line) => line + 1)}
                 className="grid size-11 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="Next line"
               >
@@ -220,12 +216,15 @@ function ReaderPage() {
             <div className="flex items-center gap-1">
               <button
                 onClick={() =>
-                  setSettings((s) => ({ ...s, theme: s.theme === "dark" ? "light" : "dark" }))
+                  setReaderSettings({
+                    ...readerSettings,
+                    theme: readerSettings.theme === "dark" ? "light" : "dark",
+                  })
                 }
                 className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
                 aria-label="Toggle theme"
               >
-                {settings.theme === "dark" ? (
+                {readerSettings.theme === "dark" ? (
                   <Sun className="size-4" />
                 ) : (
                   <Moon className="size-4" />
@@ -246,8 +245,8 @@ function ReaderPage() {
       <SettingsSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        settings={settings}
-        onChange={setSettings}
+        settings={readerSettings}
+        onChange={setReaderSettings}
       />
     </div>
   );

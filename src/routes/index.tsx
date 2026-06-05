@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronRight, Library, Settings2 } from "lucide-react";
-import { books } from "@/lib/books";
 import { BookCover } from "@/components/book-cover";
+import { useLibrary } from "@/components/library-provider";
 import { UploadDropzone } from "@/components/upload-dropzone";
 import { MiniPlayer } from "@/components/mini-player";
 
@@ -18,8 +18,9 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  const current = books[0];
-  const recent = books.slice(1, 5);
+  const { books, currentBook, setCurrentBookId } = useLibrary();
+  const current = currentBook ?? books[0] ?? null;
+  const recent = current ? books.filter((book) => book.id !== current.id).slice(0, 4) : books.slice(0, 4);
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -70,19 +71,23 @@ function Home() {
                   onChange={() => {}}
                 />
               </label>
-              <Link
-                to="/reader/$bookId"
-                params={{ bookId: current.id }}
-                className="rounded-full border border-accent-foreground/30 px-5 py-3 text-sm font-medium text-accent-foreground hover:bg-accent-foreground/10"
-              >
-                Continue reading
-              </Link>
+              {current ? (
+                <Link
+                  to="/reader/$bookId"
+                  params={{ bookId: current.id }}
+                  onClick={() => setCurrentBookId(current.id)}
+                  className="rounded-full border border-accent-foreground/30 px-5 py-3 text-sm font-medium text-accent-foreground hover:bg-accent-foreground/10"
+                >
+                  Continue reading
+                </Link>
+              ) : null}
             </div>
           </div>
         </section>
 
         {/* Continue reading */}
-        <section className="mb-10">
+        {current ? (
+          <section className="mb-10">
           <div className="mb-4 flex items-end justify-between">
             <h2 className="text-lg font-semibold tracking-tight">Continue reading</h2>
             <Link to="/library" className="text-sm font-medium text-accent">
@@ -93,6 +98,7 @@ function Home() {
           <Link
             to="/reader/$bookId"
             params={{ bookId: current.id }}
+            onClick={() => setCurrentBookId(current.id)}
             className="flex items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:bg-muted/50"
           >
             <div className="w-20 shrink-0">
@@ -113,7 +119,8 @@ function Home() {
             </div>
             <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
           </Link>
-        </section>
+          </section>
+        ) : null}
 
         {/* Recent */}
         <section className="mb-10">
@@ -126,6 +133,7 @@ function Home() {
                 key={b.id}
                 to="/reader/$bookId"
                 params={{ bookId: b.id }}
+                onClick={() => setCurrentBookId(b.id)}
                 className="group block"
               >
                 <BookCover book={b} className="transition-transform group-hover:-translate-y-0.5" />
@@ -145,7 +153,7 @@ function Home() {
         </section>
       </main>
 
-      <MiniPlayer book={current} />
+      {current ? <MiniPlayer book={current} /> : null}
     </div>
   );
 }

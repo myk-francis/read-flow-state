@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, Search, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
-import { books } from "@/lib/books";
 import { BookCover } from "@/components/book-cover";
+import { useLibrary } from "@/components/library-provider";
 
 export const Route = createFileRoute("/library")({
   head: () => ({
@@ -17,6 +17,7 @@ export const Route = createFileRoute("/library")({
 });
 
 function LibraryPage() {
+  const { books, setCurrentBookId } = useLibrary();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "reading" | "finished" | "unread">("all");
 
@@ -101,6 +102,7 @@ function LibraryPage() {
                 key={b.id}
                 to="/reader/$bookId"
                 params={{ bookId: b.id }}
+                onClick={() => setCurrentBookId(b.id)}
                 className="group block"
               >
                 <BookCover book={b} className="transition-transform group-hover:-translate-y-0.5" />
