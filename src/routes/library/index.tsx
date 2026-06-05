@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowLeft, Search, SlidersHorizontal, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowLeft, Search, Settings2, SlidersHorizontal, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { BookCover } from "@/components/book-cover";
+import { SettingsSheet } from "@/components/settings-sheet";
 import { useLibrary } from "@/components/library-provider";
 
 export const Route = createFileRoute("/library/")({
@@ -20,9 +21,27 @@ export const Route = createFileRoute("/library/")({
 });
 
 function LibraryPage() {
-  const { books, removeBook, setCurrentBookId } = useLibrary();
+  const { books, readerSettings, removeBook, setCurrentBookId, setReaderSettings } = useLibrary();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "reading" | "finished" | "unread">("all");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      setAvailableVoices(["Default voice"]);
+      return;
+    }
+
+    const readVoices = () => {
+      const voices = window.speechSynthesis.getVoices().map((voice) => voice.name);
+      setAvailableVoices(voices.length > 0 ? voices : ["Default voice"]);
+    };
+
+    readVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", readVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", readVoices);
+  }, []);
 
   const filtered = useMemo(() => {
     return books.filter((b) => {
@@ -55,12 +74,21 @@ function LibraryPage() {
             <ArrowLeft className="size-5" />
           </Link>
           <h1 className="flex-1 text-base font-semibold tracking-tight">Library</h1>
-          <button
-            className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted"
-            aria-label="Filters"
-          >
-            <SlidersHorizontal className="size-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted"
+              aria-label="Filters"
+            >
+              <SlidersHorizontal className="size-5" />
+            </button>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted"
+              aria-label="Settings"
+            >
+              <Settings2 className="size-5" />
+            </button>
+          </div>
         </div>
       </header>
 
@@ -136,6 +164,14 @@ function LibraryPage() {
           </div>
         )}
       </main>
+
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={readerSettings}
+        onChange={setReaderSettings}
+        voices={availableVoices}
+      />
     </div>
   );
 }
