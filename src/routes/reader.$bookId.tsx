@@ -23,12 +23,12 @@ export const Route = createFileRoute("/reader/$bookId")({
   },
   head: ({ loaderData }) => ({
     meta: [
-      { title: `${loaderData?.book.title ?? "Reader"} — ReadFlow` },
+      { title: `${loaderData?.book.title ?? "Reader"} — ReadAlong` },
       {
         name: "description",
         content: loaderData?.book
           ? `Listen to ${loaderData.book.title} by ${loaderData.book.author} with synchronized highlighting.`
-          : "ReadFlow reader",
+          : "ReadAlong reader",
       },
     ],
   }),
