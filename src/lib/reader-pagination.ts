@@ -1,4 +1,5 @@
 import type { EpubTextSection } from "@/lib/epub-text";
+import type { ReaderTextUnit } from "@/lib/books";
 
 const TARGET_PAGE_CHAR_COUNT = 1100;
 const HARD_MAX_PAGE_CHAR_COUNT = 1450;
@@ -11,11 +12,16 @@ export interface ReaderPage {
   pageCount: number;
   startParagraphIndex: number;
   endParagraphIndex: number;
-  paragraphs: string[];
+  units: ReadingUnit[];
+}
+
+export interface ReadingUnit {
+  text: string;
+  paragraphIndex: number;
 }
 
 function shouldCommitPage(
-  paragraphs: string[],
+  paragraphs: ReadingUnit[],
   charCount: number,
   nextParagraphLength: number,
 ): boolean {
@@ -27,30 +33,62 @@ function shouldCommitPage(
   return charCount + nextParagraphLength > HARD_MAX_PAGE_CHAR_COUNT;
 }
 
-export function paginateSection(section: EpubTextSection): ReaderPage[] {
+function splitIntoSentenceUnits(paragraph: string, paragraphIndex: number): ReadingUnit[] {
+  const normalized = paragraph.replace(/\s+/g, " ").trim();
+  if (!normalized) return [];
+
+  const sentenceMatches = normalized.match(/[^.!?]+(?:[.!?]+|$)/g) ?? [normalized];
+  const sentences = sentenceMatches
+    .map((sentence) => sentence.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  return (sentences.length > 0 ? sentences : [normalized]).map((text) => ({
+    text,
+    paragraphIndex,
+  }));
+}
+
+function buildReadingUnits(
+  paragraphs: string[],
+  textUnit: ReaderTextUnit,
+): ReadingUnit[] {
+  const units = paragraphs.flatMap((paragraph, paragraphIndex) =>
+    textUnit === "paragraphs"
+      ? [{ text: paragraph, paragraphIndex }]
+      : splitIntoSentenceUnits(paragraph, paragraphIndex),
+  );
+
+  return units.length > 0
+    ? units
+    : [{ text: "This section does not contain readable text.", paragraphIndex: 0 }];
+}
+
+export function paginateSection(
+  section: EpubTextSection,
+  textUnit: ReaderTextUnit = "paragraphs",
+): ReaderPage[] {
   const pages: ReaderPage[] = [];
-  let currentParagraphs: string[] = [];
-  let currentStart = 0;
+  const readingUnits = buildReadingUnits(section.paragraphs, textUnit);
+  let currentParagraphs: ReadingUnit[] = [];
   let currentChars = 0;
 
-  section.paragraphs.forEach((paragraph, index) => {
-    const length = paragraph.length;
+  readingUnits.forEach((unit) => {
+    const length = unit.text.length;
     if (shouldCommitPage(currentParagraphs, currentChars, length)) {
       const pageIndex = pages.length;
       pages.push({
         id: `${section.href}:${pageIndex}`,
         pageIndex,
         pageCount: 0,
-        startParagraphIndex: currentStart,
-        endParagraphIndex: index - 1,
-        paragraphs: currentParagraphs,
+        startParagraphIndex: currentParagraphs[0]?.paragraphIndex ?? 0,
+        endParagraphIndex: currentParagraphs[currentParagraphs.length - 1]?.paragraphIndex ?? 0,
+        units: currentParagraphs,
       });
       currentParagraphs = [];
-      currentStart = index;
       currentChars = 0;
     }
 
-    currentParagraphs.push(paragraph);
+    currentParagraphs.push(unit);
     currentChars += length;
   });
 
@@ -60,9 +98,9 @@ export function paginateSection(section: EpubTextSection): ReaderPage[] {
       id: `${section.href}:${pageIndex}`,
       pageIndex,
       pageCount: 0,
-      startParagraphIndex: currentStart,
-      endParagraphIndex: section.paragraphs.length - 1,
-      paragraphs: currentParagraphs,
+      startParagraphIndex: currentParagraphs[0]?.paragraphIndex ?? 0,
+      endParagraphIndex: currentParagraphs[currentParagraphs.length - 1]?.paragraphIndex ?? 0,
+      units: currentParagraphs,
     });
   }
 
@@ -73,7 +111,7 @@ export function paginateSection(section: EpubTextSection): ReaderPage[] {
       pageCount: 1,
       startParagraphIndex: 0,
       endParagraphIndex: 0,
-      paragraphs: ["This section does not contain readable text."],
+      units: [{ text: "This section does not contain readable text.", paragraphIndex: 0 }],
     });
   }
 
@@ -104,12 +142,12 @@ export function resolvePagePosition(
     );
     const resolvedPageIndex = pageIndex >= 0 ? pageIndex : 0;
     const page = pages[resolvedPageIndex] ?? pages[0]!;
+    const activeLine = page.units.findIndex(
+      (unit) => unit.paragraphIndex === options.paragraphIndex,
+    );
     return {
       pageIndex: resolvedPageIndex,
-      activeLine: Math.max(
-        0,
-        Math.min(page.paragraphs.length - 1, options.paragraphIndex! - page.startParagraphIndex),
-      ),
+      activeLine: activeLine >= 0 ? activeLine : 0,
     };
   }
 
@@ -117,7 +155,7 @@ export function resolvePagePosition(
   const page = pages[resolvedPageIndex] ?? pages[0]!;
   return {
     pageIndex: resolvedPageIndex,
-    activeLine: Math.max(0, Math.min(options?.activeLine ?? 0, page.paragraphs.length - 1)),
+    activeLine: Math.max(0, Math.min(options?.activeLine ?? 0, page.units.length - 1)),
   };
 }
 

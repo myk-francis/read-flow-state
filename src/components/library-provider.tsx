@@ -28,6 +28,7 @@ import {
   updateBookInState,
 } from "@/lib/library-state";
 import { loadLibraryState, saveLibraryState } from "@/lib/library-store";
+import { readAvailableVoiceNames, resolvePreferredVoiceName } from "@/lib/speech";
 import type { LibraryState } from "@/lib/books";
 
 const LEGACY_STORAGE_KEY = "read-flow-state/library-v1";
@@ -101,6 +102,37 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     if (!hydrated || typeof window === "undefined") return;
     void saveLibraryState(state);
   }, [hydrated, state]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+    const syncReaderVoice = () => {
+      const availableVoices = readAvailableVoiceNames();
+
+      setState((current) => {
+        const resolvedVoice = resolvePreferredVoiceName(
+          current.readerSettings.voice,
+          availableVoices,
+        );
+
+        if (current.readerSettings.voice === resolvedVoice) {
+          return current;
+        }
+
+        return {
+          ...current,
+          readerSettings: {
+            ...current.readerSettings,
+            voice: resolvedVoice,
+          },
+        };
+      });
+    };
+
+    syncReaderVoice();
+    window.speechSynthesis.addEventListener("voiceschanged", syncReaderVoice);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", syncReaderVoice);
+  }, []);
 
   const setCurrentBookId = useCallback((bookId: string) => {
     setState((current) => setCurrentBookInState(current, bookId));

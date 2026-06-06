@@ -85,6 +85,10 @@ export function sanitizeLibraryState(value: unknown): LibraryState {
       incomingSettings?.highlight === "bar"
         ? incomingSettings.highlight
         : DEFAULT_READER_SETTINGS.highlight,
+    textUnit:
+      incomingSettings?.textUnit === "paragraphs" || incomingSettings?.textUnit === "sentences"
+        ? incomingSettings.textUnit
+        : DEFAULT_READER_SETTINGS.textUnit,
   };
 
   return { books, currentBookId, readerSettings, bookmarks, notes };

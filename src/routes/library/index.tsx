@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BookCover } from "@/components/book-cover";
 import { SettingsSheet } from "@/components/settings-sheet";
 import { useLibrary } from "@/components/library-provider";
+import { readAvailableVoiceNames } from "@/lib/speech";
 
 export const Route = createFileRoute("/library/")({
   head: () => ({
@@ -29,13 +30,12 @@ function LibraryPage() {
 
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      setAvailableVoices(["Default voice"]);
+      setAvailableVoices([]);
       return;
     }
 
     const readVoices = () => {
-      const voices = window.speechSynthesis.getVoices().map((voice) => voice.name);
-      setAvailableVoices(voices.length > 0 ? voices : ["Default voice"]);
+      setAvailableVoices(readAvailableVoiceNames());
     };
 
     readVoices();

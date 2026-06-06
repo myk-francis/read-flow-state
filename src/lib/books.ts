@@ -1,4 +1,5 @@
 export type BookCoverTone = "warm" | "cool" | "sage" | "ink";
+export type ReaderTextUnit = "paragraphs" | "sentences";
 
 export interface ReaderSettings {
   fontSize: number;
@@ -7,6 +8,7 @@ export interface ReaderSettings {
   speed: number;
   theme: "light" | "dark";
   highlight: "soft" | "underline" | "bar";
+  textUnit: ReaderTextUnit;
 }
 
 export interface BookSource {
@@ -72,6 +74,7 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   speed: 1,
   theme: "light",
   highlight: "soft",
+  textUnit: "sentences",
 };
 
 const now = "2026-06-05T08:00:00.000Z";

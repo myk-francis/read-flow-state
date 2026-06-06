@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DEFAULT_VOICE_NAME, resolvePreferredVoiceName } from "@/lib/speech";
 import { cn } from "@/lib/utils";
 import type { ReaderSettings } from "@/lib/books";
 
@@ -18,8 +19,19 @@ interface Props {
   voices?: string[];
 }
 
-const VOICES = ["Default voice", "Evelyn (Natural)", "Atlas (Warm)", "June (Soft)", "Orion (Deep)"];
 const SPEEDS = [0.8, 1, 1.25, 1.5, 1.75];
+const TEXT_UNITS = [
+  {
+    value: "sentences" as const,
+    label: "Line sentences",
+    description: "Reads one sentence at a time for tighter pacing.",
+  },
+  {
+    value: "paragraphs" as const,
+    label: "Paragraphs",
+    description: "Keeps full paragraphs together while reading.",
+  },
+];
 
 export function SettingsSheet({ open, onClose, settings, onChange, voices }: Props) {
   useEffect(() => {
@@ -28,7 +40,12 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  const voiceOptions = voices && voices.length > 0 ? voices : VOICES;
+  const availableVoiceOptions = voices ?? [];
+  const voiceOptions =
+    availableVoiceOptions.length > 0 ? availableVoiceOptions : [DEFAULT_VOICE_NAME];
+  const selectedVoice = resolvePreferredVoiceName(settings.voice, availableVoiceOptions);
+  const selectedVoiceMissing =
+    availableVoiceOptions.length > 0 && settings.voice !== selectedVoice;
 
   return (
     <>
@@ -129,6 +146,29 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
 
           <div>
             <label className="mb-3 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
+              Reading layout
+            </label>
+            <div className="grid gap-2">
+              {TEXT_UNITS.map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => onChange({ ...settings, textUnit: option.value })}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-left transition-colors",
+                    settings.textUnit === option.value
+                      ? "border-accent bg-accent/10"
+                      : "border-border hover:bg-muted",
+                  )}
+                >
+                  <p className="text-sm font-medium text-foreground">{option.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{option.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-3 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Highlight style
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -183,8 +223,14 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
             <label className="mb-3 block text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Voice
             </label>
+            {selectedVoiceMissing ? (
+              <p className="mb-3 text-xs text-muted-foreground">
+                Your previously selected voice is not available on this device, so we&apos;ll use{" "}
+                {selectedVoice}.
+              </p>
+            ) : null}
             <Select
-              value={settings.voice}
+              value={selectedVoice}
               onValueChange={(value) => onChange({ ...settings, voice: value })}
             >
               <SelectTrigger className="h-11 rounded-2xl border-border bg-background text-sm">

@@ -6,6 +6,7 @@ import { useLibrary } from "@/components/library-provider";
 import { SettingsSheet } from "@/components/settings-sheet";
 import { MiniPlayer } from "@/components/mini-player";
 import { UploadDropzone } from "@/components/upload-dropzone";
+import { readAvailableVoiceNames } from "@/lib/speech";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -48,13 +49,12 @@ function Home() {
 
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      setAvailableVoices(["Default voice"]);
+      setAvailableVoices([]);
       return;
     }
 
     const readVoices = () => {
-      const voices = window.speechSynthesis.getVoices().map((voice) => voice.name);
-      setAvailableVoices(voices.length > 0 ? voices : ["Default voice"]);
+      setAvailableVoices(readAvailableVoiceNames());
     };
 
     readVoices();

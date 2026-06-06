@@ -112,8 +112,8 @@ function ReaderPageRoute() {
   ]);
 
   const localPages = useMemo(
-    () => (localSection ? paginateSection(localSection) : []),
-    [localSection],
+    () => (localSection ? paginateSection(localSection, readerSettings.textUnit) : []),
+    [localSection, readerSettings.textUnit],
   );
   const resolvedLocalPosition = useMemo(
     () =>
@@ -126,9 +126,9 @@ function ReaderPageRoute() {
   const currentPage = isLocalBook ? (localPages[resolvedLocalPosition.pageIndex] ?? null) : null;
   const activeLine = isLocalBook ? resolvedLocalPosition.activeLine : storedActiveLine;
   const currentParagraphIndex =
-    isLocalBook && currentPage ? currentPage.startParagraphIndex + activeLine : activeLine;
+    isLocalBook && currentPage ? (currentPage.units[activeLine]?.paragraphIndex ?? 0) : activeLine;
   const currentText = isLocalBook
-    ? (currentPage?.paragraphs[activeLine] ?? "")
+    ? (currentPage?.units[activeLine]?.text ?? "")
     : (book?.excerpt[activeLine] ?? "");
   const currentSectionHref = isLocalBook ? localSection?.href : undefined;
   const currentPageIndex = isLocalBook ? resolvedLocalPosition.pageIndex : 0;
@@ -260,7 +260,7 @@ function ReaderPageRoute() {
           return;
         }
 
-        const pages = paginateSection(section);
+        const pages = paginateSection(section, readerSettings.textUnit);
         const resolved = resolvePagePosition(pages, options);
         setLocalSection(section);
         persistLocalPosition(section, pages, resolved.pageIndex, resolved.activeLine);
@@ -285,7 +285,7 @@ function ReaderPageRoute() {
       if (!book) return;
 
       if (isLocalBook) {
-        const maxLine = Math.max((currentPage?.paragraphs.length ?? 1) - 1, 0);
+        const maxLine = Math.max((currentPage?.units.length ?? 1) - 1, 0);
         const nextLine =
           typeof nextLineOrUpdater === "function"
             ? nextLineOrUpdater(activeLine)
@@ -310,7 +310,7 @@ function ReaderPageRoute() {
     [
       activeLine,
       book,
-      currentPage?.paragraphs.length,
+      currentPage?.units.length,
       currentPageIndex,
       isLocalBook,
       setLocalCursor,
@@ -331,7 +331,7 @@ function ReaderPageRoute() {
       return;
     }
 
-    if (activeLine < currentPage.paragraphs.length - 1) {
+    if (activeLine < currentPage.units.length - 1) {
       setActiveLine(activeLine + 1);
       return;
     }
@@ -587,7 +587,7 @@ function ReaderPageRoute() {
           return;
         }
 
-        const pages = paginateSection(section);
+        const pages = paginateSection(section, readerSettings.textUnit);
         const useSavedPage = resume?.locationHref && resume.locationHref === section.href;
         const resolved = resolvePagePosition(pages, {
           pageIndex: useSavedPage ? resume?.pageIndex : 0,
@@ -621,7 +621,15 @@ function ReaderPageRoute() {
       localReaderRef.current = null;
       reader?.destroy();
     };
-  }, [bookData, isLocalBook, localBookAuthor, localBookId, localBookTitle, persistLocalPosition]);
+  }, [
+    bookData,
+    isLocalBook,
+    localBookAuthor,
+    localBookId,
+    localBookTitle,
+    persistLocalPosition,
+    readerSettings.textUnit,
+  ]);
 
   useEffect(() => {
     lineRefs.current = [];
@@ -699,12 +707,12 @@ function ReaderPageRoute() {
         ) : isLocalBook ? (
           <>
             {currentPage ? (
-              <ReaderPage
-                pageKey={currentPage.id}
-                paragraphs={currentPage.paragraphs}
-                activeLine={activeLine}
-                fontSize={readerSettings.fontSize}
-                lineHeight={readerSettings.lineHeight}
+                <ReaderPage
+                  pageKey={currentPage.id}
+                  paragraphs={currentPage.units.map((unit) => unit.text)}
+                  activeLine={activeLine}
+                  fontSize={readerSettings.fontSize}
+                  lineHeight={readerSettings.lineHeight}
                 highlight={readerSettings.highlight}
                 registerLineRef={(index, element) => {
                   lineRefs.current[index] = element;

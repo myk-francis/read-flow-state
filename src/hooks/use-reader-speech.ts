@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { readAvailableVoiceNames, resolvePreferredVoiceName } from "@/lib/speech";
 
 interface UseReaderSpeechOptions {
   enabled: boolean;
@@ -47,13 +48,12 @@ export function useReaderSpeech({
 
   useEffect(() => {
     if (!supported) {
-      setAvailableVoices(["Default voice"]);
+      setAvailableVoices([]);
       return;
     }
 
     const readVoices = () => {
-      const names = window.speechSynthesis.getVoices().map((voice) => voice.name);
-      setAvailableVoices(names.length > 0 ? names : ["Default voice"]);
+      setAvailableVoices(readAvailableVoiceNames());
     };
 
     readVoices();
@@ -82,7 +82,11 @@ export function useReaderSpeech({
     window.speechSynthesis.cancel();
 
     const utterance = new window.SpeechSynthesisUtterance(text);
-    const selectedVoice = voiceList.find((voice) => voice.name === voiceName);
+    const resolvedVoiceName = resolvePreferredVoiceName(
+      voiceName,
+      voiceList.map((voice) => voice.name),
+    );
+    const selectedVoice = voiceList.find((voice) => voice.name === resolvedVoiceName);
 
     if (selectedVoice) {
       utterance.voice = selectedVoice;
