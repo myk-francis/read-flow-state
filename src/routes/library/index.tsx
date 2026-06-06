@@ -153,7 +153,7 @@ function LibraryPage() {
                 <button
                   type="button"
                   onClick={() => void handleDeleteBook(b.id, b.title)}
-                  className="absolute right-0 top-0 grid size-8 place-items-center rounded-full border border-border bg-background/95 text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                  className="absolute right-0 top-0 grid size-8 place-items-center rounded-full border border-border bg-background/95 text-muted-foreground opacity-100 shadow-sm transition-opacity hover:bg-muted hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
                   aria-label={`Delete ${b.title}`}
                   title={`Delete ${b.title}`}
                 >
