@@ -33,7 +33,7 @@ export function ReaderPage({
             onClick={() => onSelectLine(index)}
             data-active={active}
             className={cn(
-              "cursor-pointer text-pretty",
+              "scroll-mt-28 scroll-mb-40 cursor-pointer text-pretty",
               highlight === "soft" && "reading-line",
               highlight === "underline" &&
                 (active

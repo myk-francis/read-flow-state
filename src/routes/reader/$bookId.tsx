@@ -632,12 +632,12 @@ function ReaderPageRoute() {
   ]);
 
   useEffect(() => {
-    lineRefs.current = [];
-  }, [currentPage?.id, currentSectionHref, isLocalBook]);
+    const frame = window.requestAnimationFrame(() => {
+      const element = lineRefs.current[activeLine];
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
 
-  useEffect(() => {
-    const element = lineRefs.current[activeLine];
-    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return () => window.cancelAnimationFrame(frame);
   }, [activeLine, currentPage?.id, currentSectionHref]);
 
   if (!book) {
