@@ -4,6 +4,7 @@ import {
   Bookmark,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   FileText,
   ListTree,
   LoaderCircle,
@@ -17,6 +18,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ReaderMapDrawer } from "@/components/reader/reader-map-drawer";
 import { ReaderNoteEditorSheet } from "@/components/reader/reader-note-editor-sheet";
 import { ReaderPage } from "@/components/reader/reader-page";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useLibrary } from "@/components/library-provider";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
 import { SettingsSheet } from "@/components/settings-sheet";
@@ -46,6 +57,8 @@ interface LocalResumeSnapshot {
   activeLine: number;
 }
 
+const TIMER_OPTIONS = [10, 20, 30] as const;
+
 function ReaderPageRoute() {
   const { bookId } = Route.useParams();
   const {
@@ -65,6 +78,10 @@ function ReaderPageRoute() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [readingMapOpen, setReadingMapOpen] = useState(false);
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
+  const [timerPickerOpen, setTimerPickerOpen] = useState(false);
+  const [timerPromptOpen, setTimerPromptOpen] = useState(false);
+  const [timerMinutes, setTimerMinutes] = useState<number | null>(null);
+  const [timerEndsAt, setTimerEndsAt] = useState<number | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [bookData, setBookData] = useState<ArrayBuffer | null>(null);
   const [bookDataLoading, setBookDataLoading] = useState(false);
@@ -193,8 +210,24 @@ function ReaderPageRoute() {
     !localSectionError &&
     !!localSection;
   const shouldKeepScreenAwake = playing && (!isLocalBook || localReaderReady);
+  const timerRemainingMs = timerEndsAt ? Math.max(0, timerEndsAt - Date.now()) : 0;
+  const timerRemainingMinutes = Math.ceil(timerRemainingMs / 60000);
 
   useScreenWakeLock(shouldKeepScreenAwake);
+
+  const startTimer = useCallback((minutes: number) => {
+    setTimerMinutes(minutes);
+    setTimerEndsAt(Date.now() + minutes * 60_000);
+    setTimerPickerOpen(false);
+    setTimerPromptOpen(false);
+  }, []);
+
+  const clearTimer = useCallback(() => {
+    setTimerMinutes(null);
+    setTimerEndsAt(null);
+    setTimerPickerOpen(false);
+    setTimerPromptOpen(false);
+  }, []);
 
   const persistLocalPosition = useCallback(
     (
@@ -491,6 +524,24 @@ function ReaderPageRoute() {
     if (!currentBookId) return;
     setPlaying(false);
   }, [currentBookId]);
+
+  useEffect(() => {
+    if (!timerEndsAt) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      if (Date.now() < timerEndsAt) {
+        return;
+      }
+
+      setPlaying(false);
+      setTimerEndsAt(null);
+      setTimerPromptOpen(true);
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [timerEndsAt]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -905,6 +956,52 @@ function ReaderPageRoute() {
             </div>
 
             <div className="flex items-center justify-center gap-0.5 sm:justify-end sm:gap-1">
+              <div className="relative">
+                <button
+                  onClick={() => setTimerPickerOpen((open) => !open)}
+                  className={cn(
+                    "grid size-9 place-items-center rounded-full hover:bg-muted hover:text-foreground",
+                    timerMinutes ? "text-accent" : "text-muted-foreground",
+                  )}
+                  aria-label="Set reading timer"
+                >
+                  <Clock3 className="size-4" />
+                </button>
+                {timerMinutes ? (
+                  <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-accent px-1 text-center text-[9px] font-bold leading-4 text-accent-foreground">
+                    {timerRemainingMinutes}
+                  </span>
+                ) : null}
+                {timerPickerOpen ? (
+                  <div className="absolute bottom-12 right-0 w-44 rounded-2xl border border-border bg-card p-2 shadow-xl">
+                    <p className="px-2 pb-2 pt-1 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                      Reading timer
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      {TIMER_OPTIONS.map((minutes) => (
+                        <button
+                          key={minutes}
+                          onClick={() => startTimer(minutes)}
+                          className={cn(
+                            "rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-muted",
+                            timerMinutes === minutes ? "bg-accent text-accent-foreground" : "",
+                          )}
+                        >
+                          {minutes} minutes
+                        </button>
+                      ))}
+                      {timerMinutes ? (
+                        <button
+                          onClick={clearTimer}
+                          className="rounded-xl px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          Turn timer off
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <button
                 onClick={() => setReadingMapOpen(true)}
                 className="grid size-9 place-items-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -1004,6 +1101,43 @@ function ReaderPageRoute() {
         onSave={handleSaveNote}
         onDraftChange={setNoteDraft}
       />
+
+      <AlertDialog open={timerPromptOpen} onOpenChange={setTimerPromptOpen}>
+        <AlertDialogContent className="max-w-md rounded-[1.75rem] border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-serif text-2xl italic">
+              Reading timer finished
+            </AlertDialogTitle>
+            <AlertDialogDescription className="leading-6">
+              Playback has paused.{" "}
+              {timerMinutes ? `Continue for another ${timerMinutes} minutes,` : "Continue reading,"}{" "}
+              or close for now.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setTimerPromptOpen(false);
+                clearTimer();
+              }}
+            >
+              Close
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (timerMinutes) {
+                  startTimer(timerMinutes);
+                } else {
+                  setTimerPromptOpen(false);
+                }
+                setPlaying(true);
+              }}
+            >
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
