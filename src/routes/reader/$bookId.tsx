@@ -133,9 +133,6 @@ function ReaderPageRoute() {
     : (book?.excerpt[activeLine] ?? "");
   const currentSectionHref = isLocalBook ? localSection?.href : undefined;
   const currentPageIndex = isLocalBook ? resolvedLocalPosition.pageIndex : 0;
-  const shouldKeepScreenAwake = playing && (!isLocalBook || localReaderReady);
-
-  useScreenWakeLock(shouldKeepScreenAwake);
 
   const currentBookmark = useMemo(
     () =>
@@ -195,6 +192,9 @@ function ReaderPageRoute() {
     !localSectionLoading &&
     !localSectionError &&
     !!localSection;
+  const shouldKeepScreenAwake = playing && (!isLocalBook || localReaderReady);
+
+  useScreenWakeLock(shouldKeepScreenAwake);
 
   const persistLocalPosition = useCallback(
     (
@@ -281,7 +281,7 @@ function ReaderPageRoute() {
         }
       }
     },
-    [book, isLocalBook, persistLocalPosition],
+    [book, isLocalBook, persistLocalPosition, readerSettings.textUnit],
   );
 
   const setActiveLine = useCallback(
@@ -711,12 +711,12 @@ function ReaderPageRoute() {
         ) : isLocalBook ? (
           <>
             {currentPage ? (
-                <ReaderPage
-                  pageKey={currentPage.id}
-                  paragraphs={currentPage.units.map((unit) => unit.text)}
-                  activeLine={activeLine}
-                  fontSize={readerSettings.fontSize}
-                  lineHeight={readerSettings.lineHeight}
+              <ReaderPage
+                pageKey={currentPage.id}
+                paragraphs={currentPage.units.map((unit) => unit.text)}
+                activeLine={activeLine}
+                fontSize={readerSettings.fontSize}
+                lineHeight={readerSettings.lineHeight}
                 highlight={readerSettings.highlight}
                 registerLineRef={(index, element) => {
                   lineRefs.current[index] = element;

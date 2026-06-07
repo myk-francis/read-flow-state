@@ -1,11 +1,5 @@
 import { useEffect, useRef } from "react";
 
-interface NavigatorWithWakeLock extends Navigator {
-  wakeLock?: {
-    request: (type: "screen") => Promise<WakeLockSentinel>;
-  };
-}
-
 export function useScreenWakeLock(enabled: boolean) {
   const sentinelRef = useRef<WakeLockSentinel | null>(null);
 
@@ -14,9 +8,9 @@ export function useScreenWakeLock(enabled: boolean) {
       return;
     }
 
-    const navigatorWithWakeLock = window.navigator as NavigatorWithWakeLock;
+    const { wakeLock } = window.navigator;
 
-    if (!navigatorWithWakeLock.wakeLock?.request) {
+    if (!wakeLock) {
       return;
     }
 
@@ -43,7 +37,7 @@ export function useScreenWakeLock(enabled: boolean) {
       }
 
       try {
-        const sentinel = await navigatorWithWakeLock.wakeLock.request("screen");
+        const sentinel = await wakeLock.request("screen");
 
         if (cancelled) {
           await sentinel.release();
