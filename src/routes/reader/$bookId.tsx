@@ -28,6 +28,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useLibrary } from "@/components/library-provider";
 import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
 import { SettingsSheet } from "@/components/settings-sheet";
@@ -958,7 +965,7 @@ function ReaderPageRoute() {
             <div className="flex items-center justify-center gap-0.5 sm:justify-end sm:gap-1">
               <div className="relative">
                 <button
-                  onClick={() => setTimerPickerOpen((open) => !open)}
+                  onClick={() => setTimerPickerOpen(true)}
                   className={cn(
                     "grid size-9 place-items-center rounded-full hover:bg-muted hover:text-foreground",
                     timerMinutes ? "text-accent" : "text-muted-foreground",
@@ -971,35 +978,6 @@ function ReaderPageRoute() {
                   <span className="absolute -right-1 -top-1 min-w-4 rounded-full bg-accent px-1 text-center text-[9px] font-bold leading-4 text-accent-foreground">
                     {timerRemainingMinutes}
                   </span>
-                ) : null}
-                {timerPickerOpen ? (
-                  <div className="absolute bottom-12 right-0 w-44 rounded-2xl border border-border bg-card p-2 shadow-xl">
-                    <p className="px-2 pb-2 pt-1 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-                      Reading timer
-                    </p>
-                    <div className="flex flex-col gap-1">
-                      {TIMER_OPTIONS.map((minutes) => (
-                        <button
-                          key={minutes}
-                          onClick={() => startTimer(minutes)}
-                          className={cn(
-                            "rounded-xl px-3 py-2 text-left text-sm transition-colors hover:bg-muted",
-                            timerMinutes === minutes ? "bg-accent text-accent-foreground" : "",
-                          )}
-                        >
-                          {minutes} minutes
-                        </button>
-                      ))}
-                      {timerMinutes ? (
-                        <button
-                          onClick={clearTimer}
-                          className="rounded-xl px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        >
-                          Turn timer off
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
                 ) : null}
               </div>
               <button
@@ -1101,6 +1079,39 @@ function ReaderPageRoute() {
         onSave={handleSaveNote}
         onDraftChange={setNoteDraft}
       />
+
+      <Sheet open={timerPickerOpen} onOpenChange={setTimerPickerOpen}>
+        <SheetContent side="bottom" className="rounded-t-[1.75rem] border-border px-0 pb-6 pt-0">
+          <SheetHeader className="border-b border-border px-6 py-5">
+            <SheetTitle className="font-serif text-2xl italic">Reading timer</SheetTitle>
+            <SheetDescription>
+              Choose how long playback should continue before pausing and checking with you.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="space-y-2 px-4 pt-4">
+            {TIMER_OPTIONS.map((minutes) => (
+              <button
+                key={minutes}
+                onClick={() => startTimer(minutes)}
+                className={cn(
+                  "w-full rounded-2xl border border-border px-4 py-3 text-left text-sm transition-colors hover:bg-muted",
+                  timerMinutes === minutes ? "bg-accent text-accent-foreground" : "bg-card",
+                )}
+              >
+                {minutes} minutes
+              </button>
+            ))}
+            {timerMinutes ? (
+              <button
+                onClick={clearTimer}
+                className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                Turn timer off
+              </button>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <AlertDialog open={timerPromptOpen} onOpenChange={setTimerPromptOpen}>
         <AlertDialogContent className="max-w-md rounded-[1.75rem] border-border">
