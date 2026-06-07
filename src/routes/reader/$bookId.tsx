@@ -18,6 +18,7 @@ import { ReaderMapDrawer } from "@/components/reader/reader-map-drawer";
 import { ReaderNoteEditorSheet } from "@/components/reader/reader-note-editor-sheet";
 import { ReaderPage } from "@/components/reader/reader-page";
 import { useLibrary } from "@/components/library-provider";
+import { useScreenWakeLock } from "@/hooks/use-screen-wake-lock";
 import { SettingsSheet } from "@/components/settings-sheet";
 import { useReaderSpeech } from "@/hooks/use-reader-speech";
 import { loadBookAsset } from "@/lib/book-assets";
@@ -132,6 +133,9 @@ function ReaderPageRoute() {
     : (book?.excerpt[activeLine] ?? "");
   const currentSectionHref = isLocalBook ? localSection?.href : undefined;
   const currentPageIndex = isLocalBook ? resolvedLocalPosition.pageIndex : 0;
+  const shouldKeepScreenAwake = playing && (!isLocalBook || localReaderReady);
+
+  useScreenWakeLock(shouldKeepScreenAwake);
 
   const currentBookmark = useMemo(
     () =>
