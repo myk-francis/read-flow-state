@@ -3,6 +3,16 @@ import { ArrowLeft, Search, Settings2, SlidersHorizontal, Trash2 } from "lucide-
 import { useEffect, useMemo, useState } from "react";
 import { BookCover } from "@/components/book-cover";
 import { SettingsSheet } from "@/components/settings-sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useLibrary } from "@/components/library-provider";
 import { readAvailableVoiceNames } from "@/lib/speech";
 
@@ -27,6 +37,9 @@ function LibraryPage() {
   const [filter, setFilter] = useState<"all" | "reading" | "finished" | "unread">("all");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [availableVoices, setAvailableVoices] = useState<string[]>([]);
+  const [bookPendingDelete, setBookPendingDelete] = useState<{ id: string; title: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) {
@@ -56,10 +69,10 @@ function LibraryPage() {
     });
   }, [books, filter, query]);
 
-  const handleDeleteBook = async (bookId: string, title: string) => {
-    const confirmed = window.confirm(`Delete "${title}" from your library?`);
-    if (!confirmed) return;
-    await removeBook(bookId);
+  const handleDeleteBook = async () => {
+    if (!bookPendingDelete) return;
+    await removeBook(bookPendingDelete.id);
+    setBookPendingDelete(null);
   };
 
   return (
@@ -152,7 +165,7 @@ function LibraryPage() {
                 </Link>
                 <button
                   type="button"
-                  onClick={() => void handleDeleteBook(b.id, b.title)}
+                  onClick={() => setBookPendingDelete({ id: b.id, title: b.title })}
                   className="absolute right-0 top-0 grid size-8 place-items-center rounded-full border border-border bg-background/95 text-muted-foreground opacity-100 shadow-sm transition-opacity hover:bg-muted hover:text-foreground md:opacity-0 md:group-hover:opacity-100"
                   aria-label={`Delete ${b.title}`}
                   title={`Delete ${b.title}`}
@@ -172,6 +185,28 @@ function LibraryPage() {
         onChange={setReaderSettings}
         voices={availableVoices}
       />
+
+      <AlertDialog
+        open={!!bookPendingDelete}
+        onOpenChange={(open) => !open && setBookPendingDelete(null)}
+      >
+        <AlertDialogContent className="max-w-md rounded-[1.75rem] border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-serif text-2xl italic">
+              Remove from library
+            </AlertDialogTitle>
+            <AlertDialogDescription className="leading-6">
+              {bookPendingDelete
+                ? `Delete "${bookPendingDelete.title}" from your library, or keep it for later.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setBookPendingDelete(null)}>Keep</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleDeleteBook()}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
