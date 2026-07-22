@@ -14,8 +14,8 @@ export default defineConfig({
     spa: {
       enabled: true,
     },
-    // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
-    // nitro/vite builds from this
-    server: { entry: "server" },
+    // Keep the server entry explicit so Vite/TanStack resolve the same file on
+    // Windows locally and Linux in GitHub Actions during prerender.
+    server: { entry: "./src/server.ts" },
   },
 });
