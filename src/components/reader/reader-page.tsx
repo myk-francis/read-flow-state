@@ -7,6 +7,7 @@ interface ReaderPageProps {
   fontSize: number;
   lineHeight: number;
   highlight: "soft" | "underline" | "bar";
+  highlightFullText: boolean;
   registerLineRef: (index: number, element: HTMLParagraphElement | null) => void;
   onSelectLine: (index: number) => void;
 }
@@ -18,13 +19,14 @@ export function ReaderPage({
   fontSize,
   lineHeight,
   highlight,
+  highlightFullText,
   registerLineRef,
   onSelectLine,
 }: ReaderPageProps) {
   return (
     <article className="mx-auto max-w-[60ch] space-y-7 font-serif" style={{ fontSize, lineHeight }}>
       {paragraphs.map((paragraph, index) => {
-        const active = index === activeLine;
+        const active = highlightFullText || index === activeLine;
 
         return (
           <p

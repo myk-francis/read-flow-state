@@ -5,7 +5,14 @@ export function readAvailableVoiceNames() {
     return [];
   }
 
-  return [...new Set(window.speechSynthesis.getVoices().map((voice) => voice.name).filter(Boolean))];
+  return [
+    ...new Set(
+      window.speechSynthesis
+        .getVoices()
+        .map((voice) => voice.name)
+        .filter(Boolean),
+    ),
+  ];
 }
 
 export function resolvePreferredVoiceName(preferredVoice: string | undefined, voices: string[]) {

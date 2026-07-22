@@ -89,6 +89,10 @@ export function sanitizeLibraryState(value: unknown): LibraryState {
       incomingSettings?.textUnit === "paragraphs" || incomingSettings?.textUnit === "sentences"
         ? incomingSettings.textUnit
         : DEFAULT_READER_SETTINGS.textUnit,
+    highlightFullText:
+      typeof incomingSettings?.highlightFullText === "boolean"
+        ? incomingSettings.highlightFullText
+        : DEFAULT_READER_SETTINGS.highlightFullText,
   };
 
   return { books, currentBookId, readerSettings, bookmarks, notes };

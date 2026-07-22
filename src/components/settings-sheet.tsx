@@ -7,6 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { DEFAULT_VOICE_NAME, resolvePreferredVoiceName } from "@/lib/speech";
 import { cn } from "@/lib/utils";
 import type { ReaderSettings } from "@/lib/books";
@@ -44,8 +45,7 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
   const voiceOptions =
     availableVoiceOptions.length > 0 ? availableVoiceOptions : [DEFAULT_VOICE_NAME];
   const selectedVoice = resolvePreferredVoiceName(settings.voice, availableVoiceOptions);
-  const selectedVoiceMissing =
-    availableVoiceOptions.length > 0 && settings.voice !== selectedVoice;
+  const selectedVoiceMissing = availableVoiceOptions.length > 0 && settings.voice !== selectedVoice;
 
   return (
     <>
@@ -99,9 +99,33 @@ export function SettingsSheet({ open, onClose, settings, onChange, voices }: Pro
                   settings.highlight === "bar" && "border-l-2 border-accent pl-2",
                 )}
               >
-                The reading line glows softly as it speaks.
+                {settings.highlightFullText
+                  ? "Every line stays highlighted while you read."
+                  : "The reading line glows softly as it speaks."}
               </span>
             </p>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-background/70 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <label
+                  htmlFor="highlight-full-text"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Reading mode
+                </label>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Highlight the full visible text instead of only the line currently being read.
+                </p>
+              </div>
+              <Switch
+                id="highlight-full-text"
+                checked={settings.highlightFullText}
+                onCheckedChange={(checked) => onChange({ ...settings, highlightFullText: checked })}
+                aria-label="Toggle full text reading mode"
+              />
+            </div>
           </div>
 
           <div>

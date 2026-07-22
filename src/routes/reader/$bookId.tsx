@@ -776,6 +776,7 @@ function ReaderPageRoute() {
                 fontSize={readerSettings.fontSize}
                 lineHeight={readerSettings.lineHeight}
                 highlight={readerSettings.highlight}
+                highlightFullText={readerSettings.highlightFullText}
                 registerLineRef={(index, element) => {
                   lineRefs.current[index] = element;
                 }}
@@ -801,6 +802,7 @@ function ReaderPageRoute() {
             fontSize={readerSettings.fontSize}
             lineHeight={readerSettings.lineHeight}
             highlight={readerSettings.highlight}
+            highlightFullText={readerSettings.highlightFullText}
             registerLineRef={(index, element) => {
               lineRefs.current[index] = element;
             }}

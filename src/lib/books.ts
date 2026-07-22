@@ -9,6 +9,7 @@ export interface ReaderSettings {
   theme: "light" | "dark";
   highlight: "soft" | "underline" | "bar";
   textUnit: ReaderTextUnit;
+  highlightFullText: boolean;
 }
 
 export interface BookSource {
@@ -75,6 +76,7 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
   theme: "light",
   highlight: "soft",
   textUnit: "sentences",
+  highlightFullText: false,
 };
 
 const now = "2026-06-05T08:00:00.000Z";

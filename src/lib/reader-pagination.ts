@@ -48,10 +48,7 @@ function splitIntoSentenceUnits(paragraph: string, paragraphIndex: number): Read
   }));
 }
 
-function buildReadingUnits(
-  paragraphs: string[],
-  textUnit: ReaderTextUnit,
-): ReadingUnit[] {
+function buildReadingUnits(paragraphs: string[], textUnit: ReaderTextUnit): ReadingUnit[] {
   const units = paragraphs.flatMap((paragraph, paragraphIndex) =>
     textUnit === "paragraphs"
       ? [{ text: paragraph, paragraphIndex }]
